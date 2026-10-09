@@ -20,6 +20,8 @@ from app.api.publications import router as publications_router
 from app.api.emails import router as emails_router
 from app.api.dashboard import router as dashboard_router
 from app.api.scheduler import router as scheduler_router
+from app.api.students import router as students_router
+from app.api.users import router as users_router
 
 async def periodic_reminder_task():
     """Background worker that periodically triggers the scheduled reminder job."""
@@ -80,6 +82,8 @@ app.include_router(publications_router, prefix=api_prefix)
 app.include_router(emails_router, prefix=api_prefix)
 app.include_router(dashboard_router, prefix=api_prefix)
 app.include_router(scheduler_router, prefix=api_prefix)
+app.include_router(students_router, prefix=api_prefix)
+app.include_router(users_router, prefix=api_prefix)
 
 @app.get("/health")
 def health_check():

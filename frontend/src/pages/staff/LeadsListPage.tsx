@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { api, Lead, LeadStatus } from '../../api/client';
+import { api, Lead, User, Writathon } from '../../api/client';
 import { StatusBadge } from '../../components/StatusBadge';
-import { Search, Filter, RefreshCw, Users, ArrowRight } from 'lucide-react';
+import { Search, RefreshCw, Users, ArrowRight, Download } from 'lucide-react';
 
 const STATUS_FILTERS: { label: string; value: string }[] = [
   { label: 'All Leads', value: '' },
@@ -18,20 +18,46 @@ const STATUS_FILTERS: { label: string; value: string }[] = [
   { label: 'Completed', value: 'COMPLETED' },
 ];
 
+const selectCls = 'px-3 py-2 rounded-xl border border-app-border bg-white text-xs outline-none focus:ring-2 focus:ring-primary';
+
+const toCsv = (rows: Lead[]) => {
+  const cols: (keyof Lead)[] = ['lead_id', 'writathon_name', 'child_name', 'age_group', 'submission_category', 'grade', 'school', 'city', 'parent_name',
+    'parent_email', 'parent_phone', 'country', 'status', 'submission_status', 'owner_name', 'created_at'];
+  const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  return [cols.join(','), ...rows.map((r) => cols.map((c) => esc(r[c])).join(','))].join('\n');
+};
+
 export const LeadsListPage: React.FC = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [writathons, setWritathons] = useState<Writathon[]>([]);
+  const [team, setTeam] = useState<User[]>([]);
   const [statusFilter, setStatusFilter] = useState('');
+  const [writathonFilter, setWritathonFilter] = useState('');
+  const [ownerFilter, setOwnerFilter] = useState('');
+  const [submittedFilter, setSubmittedFilter] = useState('');
+  const [ageFilter, setAgeFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkOwner, setBulkOwner] = useState('');
+  const [bulkStatus, setBulkStatus] = useState('');
+  const [message, setMessage] = useState('');
 
   const fetchLeads = async () => {
     setIsLoading(true);
     try {
-      const params = new URLSearchParams();
+      const params = new URLSearchParams({ limit: '1000' });
       if (statusFilter) params.append('status_filter', statusFilter);
+      if (writathonFilter) params.append('writathon_id', writathonFilter);
+      if (ownerFilter) params.append('owner_id', ownerFilter);
+      if (submittedFilter) params.append('submitted', submittedFilter);
+      if (ageFilter) params.append('age_group', ageFilter);
+      if (categoryFilter) params.append('submission_category', categoryFilter);
       if (search.trim()) params.append('search', search.trim());
       const res = await api.get<Lead[]>(`/leads?${params.toString()}`);
       setLeads(res.data);
+      setSelected(new Set());
     } catch (err) {
       console.error('Failed to fetch leads:', err);
     } finally {
@@ -40,12 +66,44 @@ export const LeadsListPage: React.FC = () => {
   };
 
   useEffect(() => {
+    api.get<Writathon[]>('/writathons').then((r) => setWritathons(r.data)).catch(() => {});
+    api.get<User[]>('/users').then((r) => setTeam(r.data.filter((u) => u.is_active))).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     fetchLeads();
-  }, [statusFilter]);
+  }, [statusFilter, writathonFilter, ownerFilter, submittedFilter, ageFilter, categoryFilter]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     fetchLeads();
+  };
+
+  const toggle = (id: number) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelected(next);
+  };
+  const allSelected = leads.length > 0 && selected.size === leads.length;
+
+  const applyBulk = async (body: { owner_id?: number | null; status?: string }) => {
+    try {
+      const res = await api.post('/leads/bulk-update', { lead_ids: [...selected], ...body });
+      setMessage(`Updated ${res.data.updated} lead(s).`);
+      fetchLeads();
+    } catch (err: any) {
+      setMessage(err.response?.data?.detail || 'Bulk update failed.');
+    }
+  };
+
+  const exportCsv = () => {
+    const rows = selected.size ? leads.filter((l) => selected.has(l.id)) : leads;
+    const url = URL.createObjectURL(new Blob([toCsv(rows)], { type: 'text/csv' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `writathon-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -55,14 +113,15 @@ export const LeadsListPage: React.FC = () => {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl md:text-3xl font-heading font-extrabold text-text-dark">
-                Lead Directory & Candidate Management
+                Writathon Registrations (Leads)
               </h1>
               <p className="text-xs text-text-muted mt-1">
-                Filter and inspect candidates along every milestone of the Writathon journey.
+                One row per student per Writathon. Filter, assign owners, update status, and export for campaigns.
               </p>
             </div>
             <button
               onClick={fetchLeads}
+              aria-label="Refresh"
               className="p-2.5 rounded-full bg-white border border-app-border text-gray-500 hover:text-black self-start md:self-auto"
             >
               <RefreshCw className="w-4 h-4" />
@@ -70,40 +129,95 @@ export const LeadsListPage: React.FC = () => {
           </div>
 
           {/* Filter Bar */}
-          <div className="mt-6 flex flex-col md:flex-row items-center gap-3">
+          <div className="mt-6 flex flex-col md:flex-row md:flex-wrap items-center gap-3">
             <form onSubmit={handleSearchSubmit} className="relative flex-1 w-full">
               <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search by Lead ID, Child, Parent Name, Email, or School..."
+                placeholder="Search by Lead ID, Child, Parent, Email, School, or City..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 rounded-xl border border-app-border bg-white text-xs outline-none focus:ring-2 focus:ring-primary shadow-xs"
               />
             </form>
+            <select aria-label="Writathon" value={writathonFilter} onChange={(e) => setWritathonFilter(e.target.value)} className={selectCls}>
+              <option value="">All Writathons</option>
+              {writathons.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+            <select aria-label="Lead owner" value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)} className={selectCls}>
+              <option value="">All owners</option>
+              <option value="0">Unassigned</option>
+              {team.map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+            </select>
+            <select aria-label="Submission" value={submittedFilter} onChange={(e) => setSubmittedFilter(e.target.value)} className={selectCls}>
+              <option value="">Any submission</option>
+              <option value="true">Story submitted</option>
+              <option value="false">Not submitted yet</option>
+            </select>
+            <select aria-label="Age group" value={ageFilter} onChange={(e) => setAgeFilter(e.target.value)} className={selectCls}>
+              <option value="">All ages</option>
+              {['8-10', '11-13', '14-18'].map((a) => <option key={a} value={a}>{a.replace('-', '–')} yrs</option>)}
+            </select>
+            <select aria-label="Category" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className={selectCls}>
+              <option value="">All categories</option>
+              {['Short Story', 'Poem', 'Novella', 'Comics'].map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
 
-            {/* Quick Status Badges Scroll */}
-            <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto py-1">
-              {STATUS_FILTERS.map((f) => (
-                <button
-                  key={f.value}
-                  onClick={() => setStatusFilter(f.value)}
-                  className={`px-3 py-1.5 rounded-pill text-xs font-semibold whitespace-nowrap transition ${
-                    statusFilter === f.value
-                      ? 'bg-primary text-white shadow-xs'
-                      : 'bg-white text-text-muted hover:bg-gray-100 border border-app-border'
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
+          <div className="mt-3 flex items-center gap-1.5 overflow-x-auto w-full py-1">
+            {STATUS_FILTERS.map((f) => (
+              <button
+                key={f.value}
+                onClick={() => setStatusFilter(f.value)}
+                className={`px-3 py-1.5 rounded-pill text-xs font-semibold whitespace-nowrap transition ${
+                  statusFilter === f.value
+                    ? 'bg-primary text-white shadow-xs'
+                    : 'bg-white text-text-muted hover:bg-gray-100 border border-app-border'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Main Table */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 space-y-3">
+        {/* Bulk actions */}
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-semibold text-text-dark">
+            {leads.length} lead(s){selected.size > 0 && ` · ${selected.size} selected`}
+          </span>
+          {selected.size > 0 && (
+            <>
+              <select aria-label="Assign owner" value={bulkOwner} onChange={(e) => setBulkOwner(e.target.value)} className={selectCls}>
+                <option value="">Assign to…</option>
+                <option value="none">Unassign</option>
+                {team.map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+              </select>
+              <button
+                disabled={!bulkOwner}
+                onClick={() => applyBulk({ owner_id: bulkOwner === 'none' ? null : Number(bulkOwner) })}
+                className="btn-secondary text-xs py-1.5 px-3"
+              >
+                Apply owner
+              </button>
+              <select aria-label="Set status" value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value)} className={selectCls}>
+                <option value="">Set status…</option>
+                {STATUS_FILTERS.slice(1).map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+              </select>
+              <button disabled={!bulkStatus} onClick={() => applyBulk({ status: bulkStatus })} className="btn-secondary text-xs py-1.5 px-3">
+                Apply status
+              </button>
+            </>
+          )}
+          <button onClick={exportCsv} disabled={leads.length === 0} className="btn-primary text-xs py-1.5 px-3 ml-auto inline-flex items-center gap-1">
+            <Download className="w-3.5 h-3.5" />
+            Export {selected.size ? 'selected' : 'all'} CSV
+          </button>
+        </div>
+        {message && <p className="text-xs text-text-muted" role="status">{message}</p>}
+
         <div className="bg-white rounded-card shadow-subtle border border-app-border overflow-hidden">
           {isLoading ? (
             <div className="text-center py-16">
@@ -114,19 +228,28 @@ export const LeadsListPage: React.FC = () => {
             <div className="text-center py-16">
               <Users className="w-12 h-12 text-gray-300 mx-auto mb-2" />
               <p className="text-sm font-semibold text-text-dark">No leads match your filter</p>
-              <p className="text-xs text-text-muted mt-1">Try resetting the search query or status filter.</p>
+              <p className="text-xs text-text-muted mt-1">Try resetting the search query or filters.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/50 text-gray-400 uppercase tracking-wider text-[10px]">
+                    <th className="py-3.5 px-4">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all"
+                        checked={allSelected}
+                        onChange={() => setSelected(allSelected ? new Set() : new Set(leads.map((l) => l.id)))}
+                      />
+                    </th>
                     <th className="py-3.5 px-4">Lead ID</th>
                     <th className="py-3.5 px-4">Child / Student</th>
                     <th className="py-3.5 px-4">Parent Details</th>
-                    <th className="py-3.5 px-4">School & Grade</th>
-                    <th className="py-3.5 px-4">Status</th>
-                    <th className="py-3.5 px-4">Reminders</th>
+                    <th className="py-3.5 px-4">Writathon</th>
+                    <th className="py-3.5 px-4">Owner</th>
+                    <th className="py-3.5 px-4">Lead Status</th>
+                    <th className="py-3.5 px-4">Story</th>
                     <th className="py-3.5 px-4">Registered</th>
                     <th className="py-3.5 px-4 text-right">Actions</th>
                   </tr>
@@ -134,32 +257,30 @@ export const LeadsListPage: React.FC = () => {
                 <tbody className="divide-y divide-gray-100">
                   {leads.map((lead) => (
                     <tr key={lead.id} className="hover:bg-primary-soft/20 transition-colors">
-                      <td className="py-3.5 px-4 font-bold text-primary">
-                        {lead.lead_id}
+                      <td className="py-3.5 px-4">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${lead.lead_id}`}
+                          checked={selected.has(lead.id)}
+                          onChange={() => toggle(lead.id)}
+                        />
                       </td>
+                      <td className="py-3.5 px-4 font-bold text-primary whitespace-nowrap">{lead.lead_id}</td>
                       <td className="py-3.5 px-4">
                         <div className="font-bold text-text-dark">{lead.child_name}</div>
-                        <div className="text-[11px] text-text-muted">Age {lead.child_age}</div>
+                        <div className="text-[11px] text-text-muted">Age {lead.age_group ?? lead.child_age} · {lead.grade}</div>
+                        {lead.submission_category && <div className="text-[11px] text-primary font-semibold">{lead.submission_category}</div>}
                       </td>
                       <td className="py-3.5 px-4">
                         <div className="font-semibold text-text-dark">{lead.parent_name}</div>
                         <div className="text-[11px] text-text-muted">{lead.parent_email}</div>
                         <div className="text-[11px] text-gray-400">{lead.parent_phone}</div>
                       </td>
-                      <td className="py-3.5 px-4 text-text-muted">
-                        <div>{lead.grade}</div>
-                        <div className="text-[11px] text-gray-400 truncate max-w-[160px]">{lead.school}</div>
-                      </td>
+                      <td className="py-3.5 px-4 text-text-muted">{lead.writathon_name}</td>
+                      <td className="py-3.5 px-4 text-text-muted">{lead.owner_name || <span className="text-gray-400">Unassigned</span>}</td>
+                      <td className="py-3.5 px-4"><StatusBadge status={lead.status} /></td>
                       <td className="py-3.5 px-4">
-                        <StatusBadge status={lead.status} />
-                      </td>
-                      <td className="py-3.5 px-4 text-text-muted">
-                        <span className="font-semibold text-text-dark">{lead.reminder_count}</span> sent
-                        {lead.last_reminder_sent_at && (
-                          <div className="text-[10px] text-gray-400">
-                            {new Date(lead.last_reminder_sent_at).toLocaleDateString()}
-                          </div>
-                        )}
+                        {lead.submission_status ? <StatusBadge status={lead.submission_status} /> : <span className="text-gray-400">Not submitted</span>}
                       </td>
                       <td className="py-3.5 px-4 text-text-muted whitespace-nowrap">
                         {new Date(lead.created_at).toLocaleDateString()}

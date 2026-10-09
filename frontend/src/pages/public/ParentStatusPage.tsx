@@ -12,17 +12,13 @@ export const ParentStatusPage: React.FC = () => {
   const { leadId: paramLeadId } = useParams<{ leadId?: string }>();
   const navigate = useNavigate();
 
-  const [searchCode, setSearchCode] = useState(paramLeadId || 'WR-2026-000105');
+  const [searchCode, setSearchCode] = useState(paramLeadId || '');
   const [leadDetail, setLeadDetail] = useState<LeadDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (paramLeadId) {
-      fetchStatus(paramLeadId);
-    } else {
-      fetchStatus(searchCode);
-    }
+    if (paramLeadId) fetchStatus(paramLeadId);
   }, [paramLeadId]);
 
   const fetchStatus = async (code: string) => {
@@ -30,7 +26,7 @@ export const ParentStatusPage: React.FC = () => {
     setIsLoading(true);
     setError('');
     try {
-      const endpoint = code.startsWith('WR-')
+      const endpoint = code.trim().toUpperCase().startsWith('WR-')
         ? `/leads/by-code/${code.trim()}`
         : `/leads/by-token/${code.trim()}`;
       const res = await api.get<LeadDetail>(endpoint);
@@ -58,13 +54,13 @@ export const ParentStatusPage: React.FC = () => {
               Track Your Writathon Journey
             </h1>
             <p className="mt-1 text-sm text-text-muted">
-              Enter your unique Lead ID (e.g. <code>WR-2026-000105</code>) to view real-time status.
+              Enter your unique Lead ID (e.g. <code>WR-2026-K7QX9M2P</code>) to view real-time status.
             </p>
 
             <form onSubmit={handleSearchSubmit} className="mt-5 flex gap-2 max-w-md mx-auto">
               <input
                 type="text"
-                placeholder="Enter Lead ID (e.g. WR-2026-000101)"
+                placeholder="Enter Tracking ID (e.g. WR-2026-K7QX9M2P)"
                 value={searchCode}
                 onChange={(e) => setSearchCode(e.target.value)}
                 className="flex-1 px-4 py-2.5 rounded-pill border border-app-border outline-none focus:ring-2 focus:ring-primary text-sm uppercase bg-white shadow-xs"
@@ -116,7 +112,7 @@ export const ParentStatusPage: React.FC = () => {
                   <StatusBadge status={leadDetail.lead.status} />
                 </div>
                 <p className="text-xs text-text-muted mt-1">
-                  Lead ID: <strong className="text-primary">{leadDetail.lead.lead_id}</strong> • Age {leadDetail.lead.child_age} • {leadDetail.lead.grade} • {leadDetail.lead.school}
+                  Lead ID: <strong className="text-primary">{leadDetail.lead.lead_id}</strong> • Age {leadDetail.lead.age_group ?? leadDetail.lead.child_age} • {leadDetail.lead.grade} • {leadDetail.lead.school}
                 </p>
                 <p className="text-xs text-text-muted">
                   Campaign: <strong>{leadDetail.writathon.name}</strong> • Parent: {leadDetail.lead.parent_name} ({leadDetail.lead.parent_email})

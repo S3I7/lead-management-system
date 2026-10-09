@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Writathon Lead Management System"
     API_V1_STR: str = "/api/v1"
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "writathon_super_secret_jwt_key_2026_secured")
+    SECRET_KEY: str  # required: set in env or backend/.env, the app refuses to start without it
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
     
@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     
     # Payment gateway options
     PAYMENT_GATEWAY_PROVIDER: str = os.getenv("PAYMENT_GATEWAY_PROVIDER", "RAZORPAY")
+    # HMAC-SHA256 key the gateway signs webhooks with; webhooks are refused while unset
+    PAYMENT_WEBHOOK_SECRET: str = ""
+
+    # Demo mode: seeds demo users/leads, enables mock checkout. Never enable in production.
+    DEMO_MODE: bool = False
+    # First admin created on startup when no admin exists
+    ADMIN_EMAIL: str = ""
+    ADMIN_PASSWORD: str = ""
     
     class Config:
         env_file = ".env"

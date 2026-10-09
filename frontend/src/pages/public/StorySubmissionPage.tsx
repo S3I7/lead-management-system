@@ -37,7 +37,7 @@ export const StorySubmissionPage: React.FC = () => {
     setIsVerifyingLead(true);
     setLeadError('');
     try {
-      const endpoint = queryId.startsWith('WR-') 
+      const endpoint = queryId.trim().toUpperCase().startsWith('WR-') 
         ? `/leads/by-code/${queryId.trim()}` 
         : `/leads/by-token/${queryId.trim()}`;
       const res = await api.get<LeadDetail>(endpoint);
@@ -148,6 +148,15 @@ export const StorySubmissionPage: React.FC = () => {
             <p className="text-text-main mt-2">
               We have received <strong>"{title}"</strong> by <strong>{leadDetail?.lead.child_name}</strong>.
             </p>
+            <div className="my-6 p-6 bg-primary-soft/50 rounded-2xl border border-primary/20 max-w-md mx-auto">
+              <span className="text-xs uppercase font-bold tracking-wider text-text-muted">Your Tracking ID</span>
+              <div className="text-3xl font-heading font-extrabold text-primary mt-1 tracking-wide">
+                {leadDetail?.lead.lead_id}
+              </div>
+              <p className="text-xs text-text-muted mt-2">
+                Save this ID. It is the only way to check your review status, so keep it private.
+              </p>
+            </div>
             <div className="my-6 p-4 bg-emerald-50 text-emerald-800 rounded-xl text-sm border border-emerald-200">
               ✓ Submission confirmation email dispatched.<br />
               ✓ Automatic reminder emails have now been safely stopped.<br />
@@ -169,12 +178,12 @@ export const StorySubmissionPage: React.FC = () => {
                   Find Your Registration
                 </h3>
                 <p className="text-xs text-text-muted">
-                  Enter your assigned Registration Lead ID (e.g. <code>WR-2026-000101</code>) from your confirmation email.
+                  Enter your assigned Registration Lead ID (e.g. <code>WR-2026-K7QX9M2P</code>) from your confirmation email.
                 </p>
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    placeholder="Enter Lead ID (e.g. WR-2026-000101)"
+                    placeholder="Enter Tracking ID (e.g. WR-2026-K7QX9M2P)"
                     value={leadIdentifier}
                     onChange={(e) => setLeadIdentifier(e.target.value)}
                     className="flex-1 px-4 py-2.5 rounded-xl border border-app-border outline-none focus:ring-2 focus:ring-primary text-sm uppercase"
@@ -194,6 +203,13 @@ export const StorySubmissionPage: React.FC = () => {
                     {leadError}
                   </p>
                 )}
+                <p className="text-xs text-text-muted pt-2 border-t border-gray-100">
+                  Lost your ID or not registered yet?{' '}
+                  <button type="button" onClick={() => navigate('/register')} className="text-primary font-semibold underline">
+                    Register as a new participant
+                  </button>{' '}
+                  and you can upload the story straight after.
+                </p>
               </div>
             ) : (
               /* Verified Lead Info Banner + Submission Form */

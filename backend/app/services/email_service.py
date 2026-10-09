@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import html
 import logging
 from typing import Optional, Any
 from sqlalchemy.orm import Session
@@ -217,7 +218,7 @@ class EmailService:
         rendered = content
         for key, value in context.items():
             placeholder = f"{{{{{key}}}}}"
-            rendered = rendered.replace(placeholder, str(value or ""))
+            rendered = rendered.replace(placeholder, html.escape(str(value or "")))  # values come from parents; templates are HTML
         return rendered
 
     @staticmethod
@@ -272,7 +273,7 @@ class EmailService:
         context = {
             "writathon_name": writathon.name,
             "child_name": lead.child_name,
-            "child_age": lead.child_age,
+            "child_age": lead.age_group or lead.child_age,
             "grade": lead.grade,
             "parent_name": lead.parent_name,
             "lead_id": lead.lead_id,

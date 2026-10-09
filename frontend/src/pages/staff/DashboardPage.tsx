@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api, DashboardStats, Lead } from '../../api/client';
 import { StatusBadge } from '../../components/StatusBadge';
+import { useAuth } from '../../context/AuthContext';
 import { 
   Users, Mail, Bell, Upload, ShieldCheck, Award, 
   CreditCard, Sparkles, BookOpen, RefreshCw, ArrowUpRight, CheckCircle2 
 } from 'lucide-react';
 
 export const DashboardPage: React.FC = () => {
+  const { user } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentLeads, setRecentLeads] = useState<Lead[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -293,7 +295,92 @@ export const DashboardPage: React.FC = () => {
             </div>
             <ArrowUpRight className="w-5 h-5 text-gray-400 group-hover:text-primary transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
           </Link>
+
+          <Link
+            to="/admin/submissions"
+            className="p-5 bg-white rounded-card shadow-subtle border border-app-border hover:border-primary transition group flex items-center justify-between"
+          >
+            <div>
+              <h3 className="font-heading font-bold text-text-dark text-base group-hover:text-primary transition-colors">
+                Story Submissions
+              </h3>
+              <p className="text-xs text-text-muted mt-0.5">All submitted stories by Writathon and status</p>
+            </div>
+            <ArrowUpRight className="w-5 h-5 text-gray-400 group-hover:text-primary transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          </Link>
+          <Link
+            to="/admin/students"
+            className="p-5 bg-white rounded-card shadow-subtle border border-app-border hover:border-primary transition group flex items-center justify-between"
+          >
+            <div>
+              <h3 className="font-heading font-bold text-text-dark text-base group-hover:text-primary transition-colors">
+                Students
+              </h3>
+              <p className="text-xs text-text-muted mt-0.5">Each child once, with history across Writathons</p>
+            </div>
+            <ArrowUpRight className="w-5 h-5 text-gray-400 group-hover:text-primary transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          </Link>
+          <Link
+            to="/admin/writathons"
+            className="p-5 bg-white rounded-card shadow-subtle border border-app-border hover:border-primary transition group flex items-center justify-between"
+          >
+            <div>
+              <h3 className="font-heading font-bold text-text-dark text-base group-hover:text-primary transition-colors">
+                Writathon Events
+              </h3>
+              <p className="text-xs text-text-muted mt-0.5">Create events and open or close registrations</p>
+            </div>
+            <ArrowUpRight className="w-5 h-5 text-gray-400 group-hover:text-primary transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          </Link>
+          {user?.role === 'ADMIN' && <Link
+            to="/admin/team"
+            className="p-5 bg-white rounded-card shadow-subtle border border-app-border hover:border-primary transition group flex items-center justify-between"
+          >
+            <div>
+              <h3 className="font-heading font-bold text-text-dark text-base group-hover:text-primary transition-colors">
+                Team & Access
+              </h3>
+              <p className="text-xs text-text-muted mt-0.5">Add staff, roles and access</p>
+            </div>
+            <ArrowUpRight className="w-5 h-5 text-gray-400 group-hover:text-primary transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          </Link>}
         </div>
+
+        {/* Per-Writathon report */}
+        {stats && stats.by_writathon.length > 0 && (
+          <div className="bg-white rounded-card p-6 shadow-subtle border border-app-border overflow-x-auto">
+            <h2 className="text-lg font-heading font-bold text-text-dark mb-1">Registrations & Submissions by Writathon</h2>
+            <p className="text-xs text-text-muted mb-4">
+              {stats.total_students} unique students · {stats.unassigned_leads} leads without an owner
+            </p>
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-gray-100 text-gray-400 uppercase tracking-wider text-[10px]">
+                  <th className="py-2.5 px-3">Writathon</th>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3 text-right">Registrations</th>
+                  <th className="py-2.5 px-3 text-right">Submitted</th>
+                  <th className="py-2.5 px-3 text-right">Not submitted</th>
+                  <th className="py-2.5 px-3 text-right">Submission rate</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {stats.by_writathon.map((w) => (
+                  <tr key={w.writathon_id}>
+                    <td className="py-2.5 px-3 font-bold text-text-dark">{w.writathon_name}</td>
+                    <td className="py-2.5 px-3"><StatusBadge status={w.status} /></td>
+                    <td className="py-2.5 px-3 text-right">{w.registrations}</td>
+                    <td className="py-2.5 px-3 text-right">{w.submissions}</td>
+                    <td className="py-2.5 px-3 text-right">{w.not_submitted}</td>
+                    <td className="py-2.5 px-3 text-right">
+                      {w.registrations ? Math.round((w.submissions / w.registrations) * 100) : 0}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Recent Leads Table */}
         <div className="bg-white rounded-card p-6 shadow-subtle border border-app-border">
@@ -329,7 +416,7 @@ export const DashboardPage: React.FC = () => {
                       {lead.lead_id}
                     </td>
                     <td className="py-3 px-3 font-semibold text-text-dark">
-                      {lead.child_name} <span className="text-gray-400 font-normal">({lead.child_age} yrs)</span>
+                      {lead.child_name} <span className="text-gray-400 font-normal">({lead.age_group ?? lead.child_age} yrs)</span>
                     </td>
                     <td className="py-3 px-3">
                       <div className="font-medium text-text-dark">{lead.parent_name}</div>

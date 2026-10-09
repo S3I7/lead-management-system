@@ -270,7 +270,7 @@ export const LeadDetailPage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <span className="text-gray-400">Age:</span>
-                    <p className="font-semibold text-text-dark">{lead.child_age} years</p>
+                    <p className="font-semibold text-text-dark">{lead.age_group ?? lead.child_age} years{lead.submission_category && ` · ${lead.submission_category}`}{lead.city && ` · ${lead.city}`}</p>
                   </div>
                   <div>
                     <span className="text-gray-400">Grade:</span>

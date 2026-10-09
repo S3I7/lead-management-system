@@ -19,6 +19,10 @@ import { LeadsListPage } from './pages/staff/LeadsListPage';
 import { LeadDetailPage } from './pages/staff/LeadDetailPage';
 import { EmailTemplatesPage } from './pages/staff/EmailTemplatesPage';
 import { CommunicationsLogPage } from './pages/staff/CommunicationsLogPage';
+import { StudentsPage } from './pages/staff/StudentsPage';
+import { SubmissionsPage } from './pages/staff/SubmissionsPage';
+import { WritathonsPage } from './pages/staff/WritathonsPage';
+import { TeamPage } from './pages/staff/TeamPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -86,6 +90,39 @@ export const App: React.FC = () => {
                   element={
                     <ProtectedRoute allowedRoles={['ADMIN', 'STAFF']}>
                       <CommunicationsLogPage />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/admin/students"
+                  element={
+                    <ProtectedRoute allowedRoles={['ADMIN', 'STAFF']}>
+                      <StudentsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/submissions"
+                  element={
+                    <ProtectedRoute allowedRoles={['ADMIN', 'STAFF']}>
+                      <SubmissionsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/writathons"
+                  element={
+                    <ProtectedRoute allowedRoles={['ADMIN', 'STAFF']}>
+                      <WritathonsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/team"
+                  element={
+                    <ProtectedRoute allowedRoles={['ADMIN']}>
+                      <TeamPage />
                     </ProtectedRoute>
                   }
                 />

@@ -1,16 +1,18 @@
 import os
 from datetime import datetime, timezone
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import desc, or_
 
 from app.core.database import get_db
 from app.models.entities import (
     Lead, LeadStatus, StorySubmission, StoryStatus,
-    ManualPlagiarismReview, PlagiarismStatus, WritathonStatus
+    ManualPlagiarismReview, PlagiarismStatus, WritathonStatus, Writathon
 )
-from app.schemas.all_schemas import StorySubmissionOut
+from app.schemas.all_schemas import StorySubmissionOut, SubmissionListItem
+from app.api.deps import require_staff_or_admin
 from app.services.storage_service import StorageService
 from app.services.email_service import EmailService
 
@@ -31,7 +33,7 @@ def submit_story(
 
     # Authenticate lead
     lead = db.query(Lead).filter(
-        (Lead.access_token == lead_token) | (Lead.lead_id == lead_token)
+        (Lead.access_token == lead_token) | (Lead.lead_id == lead_token.strip().upper())
     ).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found for the provided token or ID.")
@@ -39,6 +41,8 @@ def submit_story(
     # Check writathon deadline
     writathon = lead.writathon
     now = datetime.now(timezone.utc)
+    if writathon.status != WritathonStatus.ACTIVE:
+        raise HTTPException(status_code=400, detail="Story submissions for this Writathon are closed.")
     if writathon.submission_deadline and writathon.submission_deadline.replace(tzinfo=timezone.utc) < now:
         raise HTTPException(status_code=400, detail="Story submission deadline for this Writathon has already passed.")
 
@@ -112,8 +116,34 @@ def download_story_file(filename: str):
         content_disposition_type="inline"
     )
 
+@router.get("", response_model=List[SubmissionListItem])
+def list_submissions(
+    writathon_id: Optional[int] = None,
+    status_filter: Optional[StoryStatus] = None,
+    search: Optional[str] = None,
+    skip: int = 0,
+    limit: int = Query(100, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    staff = Depends(require_staff_or_admin)
+):
+    query = db.query(StorySubmission, Lead, Writathon).join(Lead, StorySubmission.lead_id == Lead.id) \
+        .join(Writathon, Lead.writathon_id == Writathon.id)
+    if writathon_id:
+        query = query.filter(Lead.writathon_id == writathon_id)
+    if status_filter:
+        query = query.filter(StorySubmission.status == status_filter)
+    if search:
+        like = f"%{search.strip()}%"
+        query = query.filter(or_(StorySubmission.title.ilike(like), Lead.child_name.ilike(like), Lead.lead_id.ilike(like)))
+    rows = query.order_by(desc(StorySubmission.submitted_at)).offset(skip).limit(limit).all()
+    return [
+        {**StorySubmissionOut.model_validate(sub).model_dump(), "lead_code": lead.lead_id,
+         "child_name": lead.child_name, "writathon_id": w.id, "writathon_name": w.name}
+        for sub, lead, w in rows
+    ]
+
 @router.get("/{submission_id}", response_model=StorySubmissionOut)
-def get_submission(submission_id: int, db: Session = Depends(get_db)):
+def get_submission(submission_id: int, db: Session = Depends(get_db), staff = Depends(require_staff_or_admin)):
     sub = db.query(StorySubmission).filter(StorySubmission.id == submission_id).first()
     if not sub:
         raise HTTPException(status_code=404, detail="Story submission not found.")

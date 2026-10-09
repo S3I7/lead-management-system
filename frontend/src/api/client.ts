@@ -14,6 +14,21 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// FastAPI validation errors (422) send `detail` as a list of objects; pages render `detail` as text,
+// so turn it into a readable string here instead of crashing React.
+api.interceptors.response.use(undefined, (error) => {
+  const data = error.response?.data;
+  if (Array.isArray(data?.detail)) {
+    data.detail = data.detail
+      .map((e: { loc?: (string | number)[]; msg?: string }) => {
+        const field = String(e.loc?.[e.loc.length - 1] ?? '').replace(/_/g, ' ');
+        return field ? `${field}: ${e.msg}` : e.msg;
+      })
+      .join(' • ');
+  }
+  return Promise.reject(error);
+});
+
 export interface User {
   id: number;
   email: string;
@@ -59,13 +74,20 @@ export interface Lead {
   parent_phone: string;
   child_name: string;
   child_dob?: string;
-  child_age: number;
+  child_age?: number | null;
+  age_group?: string | null;
+  submission_category?: string | null;
+  city?: string | null;
   school: string;
   grade: string;
   country: string;
   status: LeadStatus;
   source: string;
   access_token: string;
+  student_id?: number;
+  owner_id?: number | null;
+  owner_name?: string | null;
+  submission_status?: StorySubmission['status'] | null;
   reminder_count: number;
   last_reminder_sent_at?: string;
   created_at: string;
@@ -184,6 +206,39 @@ export interface DashboardStats {
   published: number;
   revenue_total: number;
   currency: string;
+  total_students: number;
+  unassigned_leads: number;
+  by_writathon: WritathonReport[];
+}
+
+export interface WritathonReport {
+  writathon_id: number;
+  writathon_name: string;
+  status: Writathon['status'];
+  registrations: number;
+  submissions: number;
+  not_submitted: number;
+}
+
+export interface Student {
+  id: number;
+  parent_name: string;
+  parent_email: string;
+  parent_phone: string;
+  child_name: string;
+  child_dob?: string;
+  school: string;
+  grade: string;
+  country: string;
+  created_at: string;
+  registration_count: number;
+}
+
+export interface SubmissionListItem extends StorySubmission {
+  lead_code: string;
+  child_name: string;
+  writathon_id: number;
+  writathon_name: string;
 }
 
 export interface EmailTemplate {

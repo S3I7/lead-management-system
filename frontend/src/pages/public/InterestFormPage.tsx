@@ -3,20 +3,46 @@ import { useNavigate } from 'react-router-dom';
 import { api, Writathon } from '../../api/client';
 import { Sparkles, CheckCircle2, BookOpen, Send, Calendar, ShieldCheck, HeartHandshake } from 'lucide-react';
 
+const AGE_GROUPS = ['8-10', '11-13', '14-18'];
+const CATEGORIES = ['Short Story', 'Poem', 'Novella', 'Comics'];
+const COUNTRY_CODES: [string, string][] = [
+  ['+91', 'India'], ['+1', 'US/Canada'], ['+44', 'UK'], ['+61', 'Australia'], ['+65', 'Singapore'],
+  ['+971', 'UAE'], ['+974', 'Qatar'], ['+966', 'Saudi Arabia'], ['+968', 'Oman'], ['+965', 'Kuwait'],
+  ['+973', 'Bahrain'], ['+60', 'Malaysia'], ['+977', 'Nepal'], ['+94', 'Sri Lanka'], ['+64', 'New Zealand'],
+];
+const labelCls = 'block text-xs font-semibold text-text-main mb-1.5';
+const inputCls = 'w-full px-4 py-2.5 rounded-xl border border-app-border focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm';
+
+const TextField: React.FC<{ label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; minLength?: number; pattern?: string; title?: string }> = ({
+  label, value, onChange, placeholder, type = 'text', minLength, pattern, title,
+}) => {
+  const id = label.toLowerCase().replace(/[^a-z]+/g, '-');
+  return (
+    <div>
+      <label htmlFor={id} className={labelCls}>{label}</label>
+      <input id={id} type={type} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} className={inputCls} minLength={minLength} pattern={pattern} title={title} required />
+    </div>
+  );
+};
+
 export const InterestFormPage: React.FC = () => {
   const navigate = useNavigate();
   const [writathons, setWritathons] = useState<Writathon[]>([]);
   const [selectedWritathonId, setSelectedWritathonId] = useState<number | ''>('');
   
   // Form fields
-  const [childName, setChildName] = useState('');
-  const [childAge, setChildAge] = useState<number>(10);
-  const [childDob, setChildDob] = useState('');
-  const [grade, setGrade] = useState('Grade 5');
-  const [school, setSchool] = useState('');
-  const [parentName, setParentName] = useState('');
+  const [childFirst, setChildFirst] = useState('');
+  const [childLast, setChildLast] = useState('');
+  const [parentFirst, setParentFirst] = useState('');
+  const [parentLast, setParentLast] = useState('');
   const [parentEmail, setParentEmail] = useState('');
-  const [parentPhone, setParentPhone] = useState('');
+  const [countryCode, setCountryCode] = useState('+91');
+  const [whatsapp, setWhatsapp] = useState('');
+  const [ageGroup, setAgeGroup] = useState('');
+  const [category, setCategory] = useState('');
+  const [grade, setGrade] = useState('');
+  const [school, setSchool] = useState('');
+  const [city, setCity] = useState('');
   const [country, setCountry] = useState('India');
   const [termsAccepted, setTermsAccepted] = useState(false);
 
@@ -56,14 +82,15 @@ export const InterestFormPage: React.FC = () => {
     try {
       const payload = {
         writathon_id: Number(selectedWritathonId),
-        child_name: childName,
-        child_dob: childDob || null,
-        child_age: Number(childAge),
+        child_name: `${childFirst.trim()} ${childLast.trim()}`,
+        parent_name: `${parentFirst.trim()} ${parentLast.trim()}`,
+        parent_email: parentEmail,
+        parent_phone: `${countryCode} ${whatsapp.trim()}`,
+        age_group: ageGroup,
+        submission_category: category,
         grade,
         school,
-        parent_name: parentName,
-        parent_email: parentEmail,
-        parent_phone: parentPhone,
+        city,
         country,
         terms_accepted: termsAccepted,
       };
@@ -89,7 +116,7 @@ export const InterestFormPage: React.FC = () => {
         <div className="max-w-4xl mx-auto px-4 text-center">
           <div className="inline-flex items-center gap-2 bg-primary-soft text-primary px-4 py-1.5 rounded-pill text-xs font-bold tracking-wide uppercase mb-4 shadow-xs">
             <Sparkles className="w-4 h-4 text-secondary" />
-            Writathon 2026 — Young Storytellers Edition
+            {selectedCampaign?.name || 'Writathon Registration'}
           </div>
           <h1 className="text-4xl md:text-5xl font-heading font-extrabold text-text-dark tracking-tight leading-tight">
             Register Your Interest in <br />
@@ -125,7 +152,7 @@ export const InterestFormPage: React.FC = () => {
                 {successData.lead_id}
               </div>
               <p className="text-xs text-text-muted mt-2">
-                Save this reference ID. You will also use it to check review progress.
+                Save this ID and keep it private. You need it to submit the story and to track its status.
               </p>
             </div>
 
@@ -180,171 +207,168 @@ export const InterestFormPage: React.FC = () => {
                 )}
               </div>
 
-              {/* Child Details Section */}
+              {/* Participant Details */}
               <div className="border-t border-app-border pt-6">
                 <div className="flex items-center gap-2 mb-4">
                   <span className="w-8 h-8 rounded-full bg-primary-soft text-primary font-bold flex items-center justify-center text-sm">
                     1
                   </span>
-                  <h3 className="text-lg font-heading font-bold text-text-dark">
-                    Child's Details
-                  </h3>
+                  <h3 className="text-lg font-heading font-bold text-text-dark">Participant Details</h3>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-text-main mb-1.5">
-                      Child Full Name *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Aarav Sharma"
-                      value={childName}
-                      onChange={(e) => setChildName(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"
-                      required
-                    />
-                  </div>
+                  <TextField label="Participant First Name *" value={childFirst} onChange={setChildFirst} placeholder="e.g. Aarav" />
+                  <TextField label="Participant Last Name *" value={childLast} onChange={setChildLast} placeholder="e.g. Sharma" />
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-xs font-semibold text-text-main mb-1.5">
-                        Age *
-                      </label>
-                      <input
-                        type="number"
-                        min="5"
-                        max="18"
-                        value={childAge}
-                        onChange={(e) => setChildAge(Number(e.target.value))}
-                        className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-text-main mb-1.5">
-                        Date of Birth
-                      </label>
-                      <input
-                        type="date"
-                        value={childDob}
-                        onChange={(e) => setChildDob(e.target.value)}
-                        className="w-full px-3 py-2.5 rounded-xl border border-app-border focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"
-                      />
-                    </div>
+                  <div>
+                    <label htmlFor="age-group" className={labelCls}>Age Group *</label>
+                    <select id="age-group" value={ageGroup} onChange={(e) => setAgeGroup(e.target.value)} className={`${inputCls} bg-white`} required>
+                      <option value="" disabled>Select age group</option>
+                      {AGE_GROUPS.map((a) => <option key={a} value={a}>{a.replace('-', '–')} years</option>)}
+                    </select>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-text-main mb-1.5">
-                      Grade / Class *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Grade 5"
-                      value={grade}
-                      onChange={(e) => setGrade(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"
-                      required
-                    />
+                    <label htmlFor="submission-category" className={labelCls}>Submission Category *</label>
+                    <select id="submission-category" value={category} onChange={(e) => setCategory(e.target.value)} className={`${inputCls} bg-white`} required>
+                      <option value="" disabled>Select category</option>
+                      {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
                   </div>
 
+                  <TextField label="Class and Section *" value={grade} onChange={setGrade} placeholder="e.g. Grade 6 – B" />
                   <div>
-                    <label className="block text-xs font-semibold text-text-main mb-1.5">
-                      School Name *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Delhi Public School"
-                      value={school}
-                      onChange={(e) => setSchool(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"
-                      required
-                    />
+                    <TextField label="School Name *" value={school} onChange={setSchool} placeholder="e.g. Delhi Public School" minLength={2} />
+                    <p className="text-[11px] text-text-muted mt-1">May also be used for the School Spirit Award, if the event has one.</p>
                   </div>
                 </div>
               </div>
 
-              {/* Parent Details Section */}
+              {/* Parent / Guardian Details */}
               <div className="border-t border-app-border pt-6">
                 <div className="flex items-center gap-2 mb-4">
                   <span className="w-8 h-8 rounded-full bg-secondary-soft text-secondary font-bold flex items-center justify-center text-sm">
                     2
                   </span>
-                  <h3 className="text-lg font-heading font-bold text-text-dark">
-                    Parent / Guardian Details
-                  </h3>
+                  <h3 className="text-lg font-heading font-bold text-text-dark">Parent / Guardian Details</h3>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-text-main mb-1.5">
-                      Parent / Guardian Name *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Rajesh Sharma"
-                      value={parentName}
-                      onChange={(e) => setParentName(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"
-                      required
-                    />
-                  </div>
+                  <TextField label="Parent/Guardian First Name *" value={parentFirst} onChange={setParentFirst} placeholder="e.g. Rajesh" />
+                  <TextField label="Parent/Guardian Last Name *" value={parentLast} onChange={setParentLast} placeholder="e.g. Sharma" />
+                  <TextField label="Email Address *" type="email" value={parentEmail} onChange={setParentEmail} placeholder="parent@gmail.com" pattern="[^@\s]+@[^@\s]+\.[^@\s]+" title="Enter a full email address, e.g. name@gmail.com" />
 
                   <div>
-                    <label className="block text-xs font-semibold text-text-main mb-1.5">
-                      Email Address (For Confirmation & Updates) *
-                    </label>
-                    <input
-                      type="email"
-                      placeholder="parent@example.com"
-                      value={parentEmail}
-                      onChange={(e) => setParentEmail(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-text-main mb-1.5">
-                      Phone Number (WhatsApp updates) *
-                    </label>
-                    <input
-                      type="tel"
-                      placeholder="+91 98765 43210"
-                      value={parentPhone}
-                      onChange={(e) => setParentPhone(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-text-main mb-1.5">
-                      Country *
-                    </label>
-                    <input
-                      type="text"
-                      value={country}
-                      onChange={(e) => setCountry(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"
-                      required
-                    />
+                    <label htmlFor="whatsapp" className={labelCls}>WhatsApp Number *</label>
+                    <div className="flex gap-2">
+                      <select
+                        aria-label="Country code"
+                        value={countryCode}
+                        onChange={(e) => setCountryCode(e.target.value)}
+                        className="px-2 py-2.5 rounded-xl border border-app-border focus:ring-2 focus:ring-primary outline-none text-sm bg-white"
+                      >
+                        {COUNTRY_CODES.map(([code, name]) => <option key={code} value={code}>{code} {name}</option>)}
+                      </select>
+                      <input
+                        id="whatsapp"
+                        type="tel"
+                        inputMode="numeric"
+                        pattern="[0-9 ]{6,15}"
+                        title="6 to 15 digits"
+                        placeholder="98765 43210"
+                        value={whatsapp}
+                        onChange={(e) => setWhatsapp(e.target.value)}
+                        className={inputCls}
+                        required
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Consent and Submit */}
+              {/* Location */}
               <div className="border-t border-app-border pt-6">
-                <label className="flex items-start gap-3 cursor-pointer select-none">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="w-8 h-8 rounded-full bg-primary-soft text-primary font-bold flex items-center justify-center text-sm">
+                    3
+                  </span>
+                  <h3 className="text-lg font-heading font-bold text-text-dark">Location</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <TextField label="City *" value={city} onChange={setCity} placeholder="e.g. Chennai" minLength={2} />
+                  <TextField label="Country *" value={country} onChange={setCountry} minLength={2} />
+                </div>
+              </div>
+
+              {/* Terms and Conditions */}
+              <div className="border-t border-app-border pt-6">
+                <h3 className="text-lg font-heading font-bold text-text-dark mb-3">Terms and Conditions *</h3>
+                <div className="max-h-80 overflow-y-auto p-4 bg-gray-50 rounded-xl border border-gray-200 text-xs text-text-main leading-relaxed space-y-3">
+                  <div>
+                    <p className="font-bold text-text-dark">👩‍🎓 Who Can Participate?</p>
+                    <p>Each Writathon may specify its eligible age groups and participation requirements. Please check the details provided for the selected event.</p>
+                  </div>
+                  <div>
+                    <p className="font-bold text-text-dark">✍️ Submission Categories</p>
+                    <p>Participants may submit their work in the following categories, subject to the selected Writathon's rules:</p>
+                    <ul className="list-disc pl-5">
+                      <li>Poems — Up to 1,000 words</li>
+                      <li>Short Stories — Up to 3,000 words</li>
+                      <li>Novellas — 3,000 to 10,000+ words</li>
+                      <li>Comics</li>
+                    </ul>
+                    <p>💡 If you are submitting multiple poems, please compile them into a single Word document before uploading, if permitted by the event guidelines.</p>
+                  </div>
+                  <div>
+                    <p className="font-bold text-text-dark">💡 Originality and Content Guidelines</p>
+                    <ul className="list-disc pl-5">
+                      <li>Your entry must be your own original work.</li>
+                      <li>AI-generated stories are not allowed unless the specific Writathon explicitly states otherwise.</li>
+                      <li>Plagiarism is strictly prohibited. Do not copy or rewrite content from books, movies, or online sources.</li>
+                      <li>Fan fiction is not permitted. Your story should feature original characters and settings rather than characters or settings from existing franchises, such as Harry Potter, Marvel, or Disney.</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-bold text-text-dark">🌈 What Genres Can You Write In?</p>
+                    <p>You are free to choose any genre or combine genres, subject to the event guidelines. Examples include Mystery, Adventure, Sci-Fi, Romance, Fantasy, Historical Fiction, and more. Your work should be creative, original, and uniquely yours.</p>
+                  </div>
+                  <div>
+                    <p className="font-bold text-text-dark">📂 Submission Format</p>
+                    <p>Please follow the submission guidelines specified for the selected Writathon. Where applicable, the standard requirements are:</p>
+                    <ul className="list-disc pl-5">
+                      <li>File Format: .doc or .docx only. PDFs are not accepted unless the event explicitly permits them.</li>
+                      <li>File Naming: Story Title – Author Name (Example: The Lost Treasure – John Doe)</li>
+                      <li>Title: Every entry must have a title at the top of the document.</li>
+                      <li>Font Style: Times New Roman, size 12, with 1.5 line spacing.</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-bold text-text-dark">📅 Submission Deadline</p>
+                    <p>
+                      Please follow the dates and deadlines specified for the selected Writathon. Visit{' '}
+                      <a href="https://learnercircle.in" target="_blank" rel="noreferrer" className="text-primary underline">LearnerCircle.in</a>{' '}
+                      for more information. Late submissions may be considered for future publishing opportunities, subject to the event's policies, but may not be eligible for the current contest.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-bold text-text-dark">📞 Need Help?</p>
+                    <p>
+                      Call: <a href="tel:+917358591444" className="text-primary underline">+91 73585 91444</a> · Email:{' '}
+                      <a href="mailto:care@learnercircle.in" className="text-primary underline">care@learnercircle.in</a>
+                    </p>
+                  </div>
+                </div>
+
+                <label className="mt-4 flex items-start gap-3 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={termsAccepted}
                     onChange={(e) => setTermsAccepted(e.target.checked)}
                     className="mt-1 w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
+                    required
                   />
                   <span className="text-xs text-text-main leading-relaxed">
-                    I agree to the Writathon participation rules. I consent to receive confirmation, reminder,
-                    and editorial result emails concerning my child's submission.
+                    I have read and agree to the Terms and Conditions.
                   </span>
                 </label>
 

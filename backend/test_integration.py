@@ -9,7 +9,7 @@ def run_tests():
     assert r_health.status_code == 200, f"Health check failed: {r_health.text}"
     print(f"Backend Health: 200 -> {r_health.json()}")
 
-    r_front = requests.get("http://127.0.0.1:5173/")
+    r_front = requests.get("http://localhost:5173/")
     assert r_front.status_code == 200, f"Frontend static check failed: {r_front.status_code}"
     print(f"Frontend Static: 200 -> HTML length: {len(r_front.text)} bytes")
 
@@ -20,6 +20,9 @@ def run_tests():
         "child_name": f"Devansh Kapoor {unique_suffix}",
         "child_dob": "2015-05-10",
         "child_age": 11,
+        "age_group": "11-13",
+        "submission_category": "Short Story",
+        "city": "New Delhi",
         "grade": "Grade 6",
         "school": "St. Columbas School, New Delhi",
         "parent_name": "Pooja Kapoor",

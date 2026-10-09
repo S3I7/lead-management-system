@@ -116,18 +116,42 @@ class Writathon(Base):
     leads = relationship("Lead", back_populates="writathon", cascade="all, delete-orphan")
 
 
+class Student(Base):
+    """One child (+ parent contact). Each Writathon they join is a Lead row (a registration)."""
+    __tablename__ = "students"
+
+    id = Column(Integer, primary_key=True, index=True)
+    parent_name = Column(String(255), nullable=False)
+    parent_email = Column(String(255), nullable=False, index=True)  # stored lowercase
+    parent_phone = Column(String(50), nullable=False)
+    child_name = Column(String(255), nullable=False)
+    child_dob = Column(Date, nullable=True)
+    school = Column(String(255), nullable=False)
+    grade = Column(String(50), nullable=False)
+    country = Column(String(100), default="India", nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
+    leads = relationship("Lead", back_populates="student")
+
+
 class Lead(Base):
     __tablename__ = "leads"
 
     id = Column(Integer, primary_key=True, index=True)
     lead_id = Column(String(50), unique=True, index=True, nullable=False)  # WR-2026-000123
     writathon_id = Column(Integer, ForeignKey("writathons.id"), nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     parent_name = Column(String(255), nullable=False)
     parent_email = Column(String(255), nullable=False, index=True)
     parent_phone = Column(String(50), nullable=False)
     child_name = Column(String(255), nullable=False)
     child_dob = Column(Date, nullable=True)
-    child_age = Column(Integer, nullable=False)
+    child_age = Column(Integer, nullable=True)  # older registrations; the form now asks for age_group
+    age_group = Column(String(20), nullable=True)  # 8-10 / 11-13 / 14-18
+    submission_category = Column(String(50), nullable=True)  # Short Story / Poem / Novella / Comics
+    city = Column(String(100), nullable=True)
     school = Column(String(255), nullable=False)
     grade = Column(String(50), nullable=False)
     country = Column(String(100), default="India", nullable=False)
@@ -140,9 +164,23 @@ class Lead(Base):
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
     writathon = relationship("Writathon", back_populates="leads")
+    student = relationship("Student", back_populates="leads")
+    owner = relationship("User")
     submissions = relationship("StorySubmission", back_populates="lead", cascade="all, delete-orphan")
     communications = relationship("CommunicationLog", back_populates="lead", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="lead", cascade="all, delete-orphan")
+
+    @property
+    def writathon_name(self):
+        return self.writathon.name if self.writathon else None
+
+    @property
+    def owner_name(self):
+        return self.owner.full_name if self.owner else None
+
+    @property
+    def submission_status(self):
+        return self.submissions[0].status if self.submissions else None
 
 
 class StorySubmission(Base):

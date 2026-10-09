@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.core.database import get_db
-from app.models.entities import Lead, LeadStatus, StorySubmission, StoryStatus, Publication, PublicationStatus, Payment, PaymentStatus
+from app.models.entities import Writathon, Student, Lead, LeadStatus, StorySubmission, StoryStatus, Publication, PublicationStatus, Payment, PaymentStatus
 from app.schemas.all_schemas import DashboardStats
 from app.api.deps import require_staff_or_admin
 
@@ -33,7 +33,21 @@ def get_dashboard_stats(
     # Revenue calculation from completed payments
     revenue_sum = db.query(func.sum(Payment.amount)).filter(Payment.status == PaymentStatus.PAID).scalar() or 0.0
 
+    # Per-Writathon registrations vs submissions, two grouped queries regardless of Writathon count
+    regs = dict(db.query(Lead.writathon_id, func.count(Lead.id)).group_by(Lead.writathon_id).all())
+    subs = dict(db.query(Lead.writathon_id, func.count(StorySubmission.id))
+                .join(StorySubmission, StorySubmission.lead_id == Lead.id).group_by(Lead.writathon_id).all())
+    by_writathon = [
+        {"writathon_id": w.id, "writathon_name": w.name, "status": w.status,
+         "registrations": regs.get(w.id, 0), "submissions": subs.get(w.id, 0),
+         "not_submitted": regs.get(w.id, 0) - subs.get(w.id, 0)}
+        for w in db.query(Writathon).order_by(Writathon.start_date.desc()).all()
+    ]
+
     return {
+        "total_students": db.query(Student).count(),
+        "unassigned_leads": db.query(Lead).filter(Lead.owner_id.is_(None)).count(),
+        "by_writathon": by_writathon,
         "total_leads": total_leads,
         "new_leads": new_leads,
         "contacted": contacted,

@@ -1,5 +1,5 @@
 from datetime import datetime, date
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Literal
 from pydantic import BaseModel, EmailStr, Field
 from app.models.entities import (
     UserRole, WritathonStatus, LeadStatus, StoryStatus,
@@ -74,12 +74,15 @@ class InterestFormSubmit(BaseModel):
     writathon_id: int
     child_name: str = Field(..., min_length=2, max_length=255)
     child_dob: Optional[date] = None
-    child_age: int = Field(..., ge=4, le=18)
+    child_age: Optional[int] = Field(None, ge=4, le=18)
+    age_group: Literal["8-10", "11-13", "14-18"]
+    submission_category: Literal["Short Story", "Poem", "Novella", "Comics"]
     grade: str = Field(..., min_length=1, max_length=50)
     school: str = Field(..., min_length=2, max_length=255)
     parent_name: str = Field(..., min_length=2, max_length=255)
     parent_email: EmailStr
     parent_phone: str = Field(..., min_length=7, max_length=25)
+    city: str = Field(..., min_length=2, max_length=100)
     country: str = "India"
     terms_accepted: bool = Field(..., description="Must accept terms and conditions")
 
@@ -93,13 +96,20 @@ class LeadOut(BaseModel):
     parent_phone: str
     child_name: str
     child_dob: Optional[date] = None
-    child_age: int
+    child_age: Optional[int] = None
+    age_group: Optional[str] = None
+    submission_category: Optional[str] = None
+    city: Optional[str] = None
     school: str
     grade: str
     country: str
     status: LeadStatus
     source: str
     access_token: str
+    student_id: Optional[int] = None
+    owner_id: Optional[int] = None
+    owner_name: Optional[str] = None
+    submission_status: Optional[StoryStatus] = None
     reminder_count: int
     last_reminder_sent_at: Optional[datetime] = None
     created_at: datetime
@@ -273,6 +283,45 @@ class LeadDetailOut(BaseModel):
     publication: Optional[PublicationOut] = None
     communications: List[CommunicationLogOut] = []
 
+class LeadBulkUpdate(BaseModel):
+    lead_ids: List[int] = Field(..., min_length=1, max_length=1000)
+    owner_id: Optional[int] = None  # only applied when sent; null unassigns
+    status: Optional[LeadStatus] = None
+
+class StudentOut(BaseModel):
+    id: int
+    parent_name: str
+    parent_email: str
+    parent_phone: str
+    child_name: str
+    child_dob: Optional[date] = None
+    school: str
+    grade: str
+    country: str
+    created_at: datetime
+    registration_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+class StudentHistoryOut(BaseModel):
+    student: StudentOut
+    registrations: List[LeadOut]
+
+class SubmissionListItem(StorySubmissionOut):
+    lead_code: str
+    child_name: str
+    writathon_id: int
+    writathon_name: str
+
+class WritathonReport(BaseModel):
+    writathon_id: int
+    writathon_name: str
+    status: WritathonStatus
+    registrations: int
+    submissions: int
+    not_submitted: int
+
 # --- Dashboard Stats Schema ---
 class DashboardStats(BaseModel):
     total_leads: int
@@ -289,3 +338,6 @@ class DashboardStats(BaseModel):
     published: int
     revenue_total: float
     currency: str = "INR"
+    total_students: int = 0
+    unassigned_leads: int = 0
+    by_writathon: List[WritathonReport] = []

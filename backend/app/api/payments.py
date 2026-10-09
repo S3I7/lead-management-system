@@ -1,7 +1,9 @@
+import hashlib
+import hmac
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -15,6 +17,7 @@ from app.schemas.all_schemas import (
 from app.services.payment_service import PaymentService
 from app.services.email_service import EmailService
 from app.api.deps import require_staff_or_admin
+from app.core.config import settings
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
@@ -57,7 +60,10 @@ def process_checkout(
     """
     Simulates frontend payment gateway submission (Razorpay/Stripe checkout),
     which immediately delegates to the server-side verification/webhook logic.
+    Demo only: in production the gateway confirms payment through /webhook.
     """
+    if not settings.DEMO_MODE:
+        raise HTTPException(status_code=403, detail="Payments are confirmed by the payment gateway only.")
     payment = db.query(Payment).filter(Payment.payment_link_token == token).first()
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found.")
@@ -77,12 +83,27 @@ def process_checkout(
     )
 
 @router.post("/webhook")
-def payment_webhook(payload: PaymentWebhookPayload, db: Session = Depends(get_db)):
+async def payment_webhook(request: Request, db: Session = Depends(get_db)):
     """
-    Standard Server-Side Webhook endpoint for Payment Gateways (Razorpay, Stripe).
-    Verifies payment status and completes lead/publication workflow.
+    Server-side webhook for payment gateways. The body must be signed:
+    header X-Webhook-Signature = hex HMAC-SHA256(raw body, PAYMENT_WEBHOOK_SECRET).
     """
+    # shortcut: generic signed payload, not Razorpay's/Stripe's native event format; adapt when wiring the real gateway
+    if not settings.PAYMENT_WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Payment webhook is not configured.")
+    raw = await request.body()
+    expected = hmac.new(settings.PAYMENT_WEBHOOK_SECRET.encode(), raw, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, request.headers.get("X-Webhook-Signature", "")):
+        raise HTTPException(status_code=401, detail="Invalid webhook signature.")
+    payload = PaymentWebhookPayload.model_validate_json(raw)
+
+    payment = db.query(Payment).filter(Payment.payment_link_token == payload.payment_link_token).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found.")
     is_success = payload.status.lower() in ["captured", "paid", "succeeded", "success"]
+    if is_success and round(payload.amount, 2) != round(float(payment.amount), 2):
+        raise HTTPException(status_code=400, detail="Paid amount does not match the payment amount.")
+
     payment = PaymentService.process_webhook_or_verification(
         db=db,
         payment_token=payload.payment_link_token,

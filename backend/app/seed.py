@@ -21,6 +21,40 @@ def seed_database(db: Session):
     # Ensure tables exist
     Base.metadata.create_all(bind=engine)
 
+    # 1. First admin from env (production); demo users only in DEMO_MODE
+    if settings.ADMIN_EMAIL and settings.ADMIN_PASSWORD and not db.query(User).filter(User.role == UserRole.ADMIN).first():
+        db.add(User(email=settings.ADMIN_EMAIL.lower(), hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
+                    full_name="Administrator", role=UserRole.ADMIN, is_active=True))
+        db.commit()
+
+    # 2. Email Templates
+    for code, tpl in DEFAULT_TEMPLATES.items():
+        existing = db.query(EmailTemplate).filter(EmailTemplate.template_code == code).first()
+        if not existing:
+            new_t = EmailTemplate(
+                template_code=code,
+                name=tpl["name"],
+                subject_template=tpl["subject"],
+                body_template=tpl["body"],
+                is_active=True
+            )
+            db.add(new_t)
+    db.commit()
+
+    if settings.DEMO_MODE:
+        seed_demo_data(db)
+
+    # Link registrations created before students existed (and demo leads) to a Student
+    from app.api.leads import get_or_create_student
+    for lead in db.query(Lead).filter(Lead.student_id.is_(None)).all():
+        lead.student_id = get_or_create_student(
+            db, parent_name=lead.parent_name, parent_email=lead.parent_email, parent_phone=lead.parent_phone,
+            child_name=lead.child_name, child_dob=lead.child_dob, school=lead.school, grade=lead.grade,
+            country=lead.country).id
+    db.commit()
+
+
+def seed_demo_data(db: Session):
     # 1. Users
     admin_user = db.query(User).filter(User.email == "admin@writathon.com").first()
     if not admin_user:
@@ -58,20 +92,6 @@ def seed_database(db: Session):
     db.commit()
     db.refresh(admin_user)
     db.refresh(staff_user)
-
-    # 2. Email Templates
-    for code, tpl in DEFAULT_TEMPLATES.items():
-        existing = db.query(EmailTemplate).filter(EmailTemplate.template_code == code).first()
-        if not existing:
-            new_t = EmailTemplate(
-                template_code=code,
-                name=tpl["name"],
-                subject_template=tpl["subject"],
-                body_template=tpl["body"],
-                is_active=True
-            )
-            db.add(new_t)
-    db.commit()
 
     # 3. Writathon Campaign
     writathon = db.query(Writathon).filter(Writathon.code == "WR2026").first()

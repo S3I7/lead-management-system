@@ -13,7 +13,7 @@ PARENT                                                STAFF / ADMIN
 Interest Form Registration                                  │
   │                                                         │
   ▼                                                         │
-Lead Created (e.g. WR-2026-000101, Status: NEW)             │
+Lead Created (e.g. WR-2026-K7QX9M2P, Status: NEW)           │
   │                                                         │
   ▼                                                         │
 Confirmation Email Dispatched (Status: CONTACTED)           │
@@ -70,12 +70,14 @@ Under Review Queue ────────────────────�
 ### 1. Backend Permission Enforcement
 - **Staff / Admin Endpoints**: All protected CRM endpoints (`/api/v1/dashboard/stats`, `/api/v1/leads`, `/api/v1/reviews/*`, `/api/v1/plagiarism/*`, `/api/v1/publications/*`, `/api/v1/scheduler/*`, `/api/v1/emails/*`) require a valid JWT with role `STAFF` or `ADMIN`.
 - **Parent Restrictions**: If a user logged in as `PARENT` attempts to request staff stats or leads data, the backend strictly returns **`403 Forbidden`** (`Operation requires Staff or Admin privileges`).
-- **Parent Access**: Parents can only access **their own** lead details via their unique lead ID / access token through `/api/v1/leads/by-code/{lead_id}` or `/api/v1/leads/by-token/{token}`.
+- **Parent Access**: Parents reach **their own** record with their tracking ID (random, e.g. `WR-2026-K7QX9M2P`, so it can't be guessed) through `/api/v1/leads/by-code/{lead_id}` or `/api/v1/leads/by-token/{token}`.
+- **Payments**: Only a signed gateway webhook (`X-Webhook-Signature` = HMAC-SHA256 of the body with `PAYMENT_WEBHOOK_SECRET`) can mark a payment PAID. The mock checkout works only with `DEMO_MODE=true`.
+- **Roles**: Admins manage Writathons, email templates and the team (`/admin/team`); staff manage leads, ownership, reviews and publications.
 
 ### 2. Frontend Route Protection
 - **`ProtectedRoute` wrapper**: Wraps `/admin/dashboard`, `/admin/leads`, `/admin/leads/:id`, `/admin/templates`, and `/admin/communications`.
 - If a parent visits `/admin/dashboard`, they are met with a dedicated **"Staff Access Only - Access Restricted"** screen directing them to the **Parent Portal**.
-- **Adaptive Navbar**: The "Staff Dashboard" button is hidden for parents and replaced with a disabled badge. Clicking the "Parent" role in the demo switcher automatically redirects away from `/admin/*` to `/status`.
+- **Adaptive Navbar**: The "Staff Dashboard" button is hidden for parents and replaced with a disabled badge.
 
 ---
 
@@ -108,6 +110,9 @@ Under Review Queue ────────────────────�
 ## 🏃 Running the Application
 
 ### 1. Start the Backend API
+Copy `backend/.env.example` to `backend/.env` and set `SECRET_KEY` (required). For production also set `ADMIN_EMAIL` / `ADMIN_PASSWORD` (first admin) and `PAYMENT_WEBHOOK_SECRET`. Set `DEMO_MODE=true` only locally, to get the demo users, sample leads and mock checkout.
+
+The schema is created on startup. If you have a `writathon.db` from before the Students / lead-owner change, delete it once so it is recreated.
 ```powershell
 cd c:\Users\arrsa\lms\backend
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
@@ -124,9 +129,9 @@ npm run dev -- --port 5173 --host
 
 ---
 
-## 👥 Demo Credentials & Fast Role Switcher
+## 👥 Demo Credentials (`DEMO_MODE=true` only)
 
-Use the 1-click **Role Switcher** in the top navigation bar or log in with:
+Log in with:
 | Role | Email | Password | Access Privileges |
 | :--- | :--- | :--- | :--- |
 | **Administrator** | `admin@writathon.com` | `admin123` | Full access to CRM, Writathons, Templates, Users |
@@ -145,3 +150,9 @@ Use the 1-click **Role Switcher** in the top navigation bar or log in with:
 - **Lead Detail View**: [http://localhost:5173/admin/leads/5](http://localhost:5173/admin/leads/5)
 - **Email Templates Manager**: [http://localhost:5173/admin/templates](http://localhost:5173/admin/templates)
 - **Communications Audit Log**: [http://localhost:5173/admin/communications](http://localhost:5173/admin/communications)
+- **Story Submissions**: [http://localhost:5173/admin/submissions](http://localhost:5173/admin/submissions)
+- **Students & Participation History**: [http://localhost:5173/admin/students](http://localhost:5173/admin/students)
+- **Writathon Events**: [http://localhost:5173/admin/writathons](http://localhost:5173/admin/writathons)
+- **Team & Access (admin)**: [http://localhost:5173/admin/team](http://localhost:5173/admin/team)
+
+Backend self-check (no server needed): `cd backend && python test_security.py`

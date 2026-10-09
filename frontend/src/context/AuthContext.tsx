@@ -7,7 +7,6 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<User>;
   logout: () => void;
-  quickSwitch: (role: 'ADMIN' | 'STAFF' | 'PARENT') => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -50,20 +49,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
   };
 
-  const quickSwitch = async (role: 'ADMIN' | 'STAFF' | 'PARENT') => {
-    try {
-      const res = await api.post(`/auth/quick-switch/${role}`);
-      const { access_token, user: switchedUser } = res.data;
-      localStorage.setItem('writathon_token', access_token);
-      setToken(access_token);
-      setUser(switchedUser);
-    } catch (err) {
-      console.error('Quick switch failed:', err);
-    }
-  };
-
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, logout, quickSwitch }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
