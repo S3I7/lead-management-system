@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
-import { api, LeadDetail } from '../../api/client';
+import { api, PublicLeadDetail } from '../../api/client';
 import { Upload, FileText, CheckCircle2, AlertCircle, Sparkles, Shield, ArrowRight } from 'lucide-react';
 
 export const StorySubmissionPage: React.FC = () => {
@@ -10,7 +10,7 @@ export const StorySubmissionPage: React.FC = () => {
   const navigate = useNavigate();
 
   const [leadIdentifier, setLeadIdentifier] = useState(paramLeadId || '');
-  const [leadDetail, setLeadDetail] = useState<LeadDetail | null>(null);
+  const [leadDetail, setLeadDetail] = useState<PublicLeadDetail | null>(null);
   const [isVerifyingLead, setIsVerifyingLead] = useState(false);
   const [leadError, setLeadError] = useState('');
 
@@ -40,7 +40,7 @@ export const StorySubmissionPage: React.FC = () => {
       const endpoint = queryId.trim().toUpperCase().startsWith('WR-') 
         ? `/leads/by-code/${queryId.trim()}` 
         : `/leads/by-token/${queryId.trim()}`;
-      const res = await api.get<LeadDetail>(endpoint);
+      const res = await api.get<PublicLeadDetail>(endpoint);
       setLeadDetail(res.data);
       if (res.data.submission) {
         setTitle(res.data.submission.title);
@@ -97,7 +97,7 @@ export const StorySubmissionPage: React.FC = () => {
 
     try {
       const formData = new FormData();
-      formData.append('lead_token', leadDetail.lead.access_token);
+      formData.append('lead_token', tokenFromUrl || leadDetail.lead.lead_id);
       formData.append('title', title);
       if (wordCount) formData.append('word_count', wordCount);
       if (category) formData.append('category', category);

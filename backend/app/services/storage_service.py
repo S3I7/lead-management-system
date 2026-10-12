@@ -15,7 +15,7 @@ class StorageService:
         checks size, and saves to storage directory.
         Returns: (file_url, saved_filename, detected_mime_type, file_size)
         """
-        content = file.file.read()
+        content = file.file.read(settings.MAX_FILE_SIZE_BYTES + 1)  # never buffer more than the limit
         file_size = len(content)
         
         if file_size == 0:
@@ -41,7 +41,8 @@ class StorageService:
             try:
                 with zipfile.ZipFile(BytesIO(content)) as z:
                     namelist = z.namelist()
-                    if "[Content_Types].xml" in namelist or any(n.startswith("word/") for n in namelist):
+                    # word/document.xml is what makes it a Word file (xlsx/pptx/plain zips also start with PK)
+                    if "[Content_Types].xml" in namelist and "word/document.xml" in namelist:
                         detected_mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                         extension = ".docx"
             except Exception:
@@ -62,7 +63,15 @@ class StorageService:
         # File URL relative or download endpoint
         file_url = f"/api/v1/submissions/files/{unique_filename}"
         
-        return file_url, file.filename or f"story{extension}", detected_mime, file_size
+        original = os.path.basename((file.filename or "").replace("\\", "/")).strip()[:200] or f"story{extension}"
+        return file_url, original, detected_mime, file_size
+
+    @staticmethod
+    def delete_file(file_url: str) -> None:
+        try:
+            os.remove(os.path.join(settings.UPLOAD_DIR, os.path.basename(file_url)))
+        except FileNotFoundError:
+            pass
 
     @staticmethod
     def get_file_path(filename: str) -> str:

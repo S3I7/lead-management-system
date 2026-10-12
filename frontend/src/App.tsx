@@ -15,6 +15,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 // Staff & Admin pages
 import { LoginPage } from './pages/staff/LoginPage';
 import { DashboardPage } from './pages/staff/DashboardPage';
+import { StaffDashboardPage } from './pages/staff/StaffDashboardPage';
 import { LeadsListPage } from './pages/staff/LeadsListPage';
 import { LeadDetailPage } from './pages/staff/LeadDetailPage';
 import { EmailTemplatesPage } from './pages/staff/EmailTemplatesPage';
@@ -56,8 +57,16 @@ export const App: React.FC = () => {
                 <Route
                   path="/admin/dashboard"
                   element={
-                    <ProtectedRoute allowedRoles={['ADMIN', 'STAFF']}>
+                    <ProtectedRoute allowedRoles={['ADMIN']}>
                       <DashboardPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/staff/dashboard"
+                  element={
+                    <ProtectedRoute allowedRoles={['STAFF', 'ADMIN']}>
+                      <StaffDashboardPage />
                     </ProtectedRoute>
                   }
                 />

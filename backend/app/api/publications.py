@@ -8,6 +8,7 @@ from app.models.entities import (
 )
 from app.schemas.all_schemas import PublicationUpdate, PublicationOut
 from app.api.deps import require_staff_or_admin
+from app.core.audit import audit
 
 router = APIRouter(prefix="/publications", tags=["Publications"])
 
@@ -22,8 +23,14 @@ def update_publication_status(
     if not story:
         raise HTTPException(status_code=404, detail="Story submission not found.")
 
+    if story.status not in (StoryStatus.APPROVED, StoryStatus.PUBLISHED):
+        raise HTTPException(status_code=409, detail="Only stories whose publication fee has been paid can enter publication.")
+
     publication = db.query(Publication).filter(Publication.story_id == story_id).first()
     now = datetime.now(timezone.utc)
+    audit(db, publisher, "publication.update", "story_submission", story.id,
+          {"publication_status": [publication.publication_status if publication else None, payload.publication_status],
+           "publication_url": payload.publication_url})
 
     if not publication:
         publication = Publication(
@@ -45,8 +52,7 @@ def update_publication_status(
         if payload.publication_status == PublicationStatus.PUBLISHED and not publication.published_at:
             publication.published_at = now
 
-    if payload.publication_status == PublicationStatus.PUBLISHED:
-        story.status = StoryStatus.PUBLISHED
+    story.status = StoryStatus.PUBLISHED if payload.publication_status == PublicationStatus.PUBLISHED else StoryStatus.APPROVED
 
     db.commit()
     db.refresh(publication)

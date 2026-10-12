@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
@@ -5,13 +6,16 @@ from app.core.security import verify_password, create_access_token
 from app.models.entities import User, UserRole
 from app.schemas.all_schemas import UserLogin, Token, UserOut
 from app.api.deps import get_current_user
+from app.core.rate_limit import rate_limit
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=Token, dependencies=[Depends(rate_limit)])
 def login(credentials: UserLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == credentials.email.lower()).first()
     if not user or not verify_password(credentials.password, user.hashed_password):
+        logger.warning("Failed login for user id %s", user.id if user else "unknown")  # never log the password
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password."

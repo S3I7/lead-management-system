@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { api, LeadDetail } from '../../api/client';
+import { api, PublicLeadDetail } from '../../api/client';
 import { LeadJourneyStepper } from '../../components/LeadJourneyStepper';
 import { StatusBadge } from '../../components/StatusBadge';
 import { 
-  Search, BookOpen, Download, CreditCard, Sparkles, 
+  Search, BookOpen, CreditCard, Sparkles, 
   Mail, Calendar, School, Award, AlertCircle, CheckCircle2, ExternalLink 
 } from 'lucide-react';
 
@@ -13,7 +13,7 @@ export const ParentStatusPage: React.FC = () => {
   const navigate = useNavigate();
 
   const [searchCode, setSearchCode] = useState(paramLeadId || '');
-  const [leadDetail, setLeadDetail] = useState<LeadDetail | null>(null);
+  const [leadDetail, setLeadDetail] = useState<PublicLeadDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -29,7 +29,7 @@ export const ParentStatusPage: React.FC = () => {
       const endpoint = code.trim().toUpperCase().startsWith('WR-')
         ? `/leads/by-code/${code.trim()}`
         : `/leads/by-token/${code.trim()}`;
-      const res = await api.get<LeadDetail>(endpoint);
+      const res = await api.get<PublicLeadDetail>(endpoint);
       setLeadDetail(res.data);
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Registration record not found.');
@@ -123,7 +123,7 @@ export const ParentStatusPage: React.FC = () => {
               <div className="flex flex-wrap items-center gap-2">
                 {!leadDetail.submission && (
                   <button
-                    onClick={() => navigate(`/submit-story/${leadDetail.lead.lead_id}?token=${leadDetail.lead.access_token}`)}
+                    onClick={() => navigate(`/submit-story/${leadDetail.lead.lead_id}`)}
                     className="btn-primary text-sm py-2 px-5"
                   >
                     <BookOpen className="w-4 h-4" />
@@ -171,23 +171,15 @@ export const ParentStatusPage: React.FC = () => {
                         <p className="font-semibold text-text-dark">{leadDetail.submission.word_count || 'N/A'} words</p>
                       </div>
                     </div>
-                    <div className="pt-2">
-                      <a
-                        href={`http://localhost:8000${leadDetail.submission.file_url}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="btn-secondary text-xs py-1.5 px-4"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        Download File ({leadDetail.submission.file_name})
-                      </a>
-                    </div>
+                    <p className="pt-2 text-xs text-text-muted">
+                      File: {leadDetail.submission.file_name} (kept private for the editorial team)
+                    </p>
                   </div>
                 ) : (
                   <div className="text-center py-6 bg-gray-50 rounded-xl border border-gray-200">
                     <p className="text-xs text-text-muted">No story submitted yet.</p>
                     <button
-                      onClick={() => navigate(`/submit-story/${leadDetail.lead.lead_id}?token=${leadDetail.lead.access_token}`)}
+                      onClick={() => navigate(`/submit-story/${leadDetail.lead.lead_id}`)}
                       className="btn-primary text-xs py-1.5 px-4 mt-3"
                     >
                       Upload Now
@@ -298,7 +290,7 @@ export const ParentStatusPage: React.FC = () => {
                           <StatusBadge status={comm.status} />
                         </div>
                         <p className="text-text-muted mt-0.5">
-                          Template: <strong>{comm.template}</strong> • Sent to: {comm.recipient}
+                          Template: <strong>{comm.template}</strong>
                         </p>
                       </div>
                       <span className="text-text-muted whitespace-nowrap">

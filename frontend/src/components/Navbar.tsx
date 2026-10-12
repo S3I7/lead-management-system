@@ -1,15 +1,31 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Feather, LayoutDashboard, LogOut, BookOpen, User as UserIcon } from 'lucide-react';
+import { Feather, LayoutDashboard, LogOut, BookOpen, User as UserIcon, Menu, X } from 'lucide-react';
+
+const publicLinks = [
+  { to: '/register', label: 'Interest Form' },
+  { to: '/submit-story', label: 'Submit Story' },
+  { to: '/status', label: 'Check Status' },
+];
 
 export const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  const isStaffRoute = location.pathname.startsWith('/admin');
+  useEffect(() => setMenuOpen(false), [location.pathname]);
+
   const isStaffOrAdmin = user?.role === 'ADMIN' || user?.role === 'STAFF';
+  const dashboardPath = user?.role === 'ADMIN' ? '/admin/dashboard' : '/staff/dashboard';
+  const isDashboardActive = location.pathname === '/admin/dashboard' || location.pathname === '/staff/dashboard';
+  const isActive = (to: string) =>
+    location.pathname.startsWith(to) || (to === '/register' && location.pathname === '/');
+  const mobileLinkClass = (to: string) =>
+    `block px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+      isActive(to) ? 'bg-primary-soft text-primary font-semibold' : 'text-text-main hover:bg-gray-100'
+    }`;
 
   const handleLogout = () => {
     logout();
@@ -41,9 +57,6 @@ export const Navbar: React.FC = () => {
             <div>
               <span className="font-heading font-extrabold text-xl tracking-tight bg-brand-gradient bg-clip-text text-transparent">
                 Writathon
-              </span>
-              <span className="text-[10px] block font-semibold text-text-muted uppercase tracking-widest -mt-1">
-                Lead CRM & Publication
               </span>
             </div>
           </Link>
@@ -86,15 +99,15 @@ export const Navbar: React.FC = () => {
               <>
                 <span className="h-5 w-px bg-gray-300 mx-2" />
                 <Link
-                  to="/admin/dashboard"
+                  to={dashboardPath}
                   className={`px-4 py-2 rounded-pill text-sm font-medium flex items-center gap-1.5 transition-colors ${
-                    isStaffRoute
+                    isDashboardActive
                       ? 'bg-primary text-white shadow-sm'
                       : 'text-primary hover:bg-primary-soft font-semibold'
                   }`}
                 >
                   <LayoutDashboard className="w-4 h-4" />
-                  Staff Dashboard
+                  {user?.role === 'ADMIN' ? 'Admin Dashboard' : 'Staff Dashboard'}
                 </Link>
               </>
             )}
@@ -143,8 +156,56 @@ export const Navbar: React.FC = () => {
                 Sign In
               </Link>
             )}
+
+            <button
+              type="button"
+              onClick={() => setMenuOpen((o) => !o)}
+              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={menuOpen}
+              aria-controls="mobile-nav"
+              className="md:hidden p-2 rounded-xl border border-app-border text-text-main hover:bg-gray-100 transition-colors"
+            >
+              {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
           </div>
         </div>
+
+        {menuOpen && (
+          <nav id="mobile-nav" className="md:hidden border-t border-app-border py-3 space-y-1">
+            {publicLinks.map((l) => (
+              <Link key={l.to} to={l.to} className={mobileLinkClass(l.to)}>
+                {l.label}
+              </Link>
+            ))}
+
+            {isStaffOrAdmin && (
+              <>
+                <p className="px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-text-muted">
+                  {user?.role === 'ADMIN' ? 'Administration' : 'Staff Workspace'}
+                </p>
+                <Link to={dashboardPath} className={mobileLinkClass(dashboardPath)}>
+                  {user?.role === 'ADMIN' ? 'Admin Dashboard' : 'Staff Dashboard'}
+                </Link>
+                {user?.role === 'ADMIN' ? (
+                  <>
+                    <Link to="/admin/leads" className={mobileLinkClass('/admin/leads')}>All Leads</Link>
+                    <Link to="/admin/submissions" className={mobileLinkClass('/admin/submissions')}>Story Submissions</Link>
+                    <Link to="/admin/students" className={mobileLinkClass('/admin/students')}>Students</Link>
+                    <Link to="/admin/writathons" className={mobileLinkClass('/admin/writathons')}>Writathon Events</Link>
+                    <Link to="/admin/templates" className={mobileLinkClass('/admin/templates')}>Email Templates</Link>
+                    <Link to="/admin/communications" className={mobileLinkClass('/admin/communications')}>Communication Log</Link>
+                    <Link to="/admin/team" className={mobileLinkClass('/admin/team')}>Team & Access</Link>
+                  </>
+                ) : (
+                  <>
+                    <Link to={`/admin/leads?owner_id=${user?.id || 0}`} className={mobileLinkClass('/admin/leads')}>My Assigned Leads</Link>
+                    <Link to="/admin/communications" className={mobileLinkClass('/admin/communications')}>Communication History</Link>
+                  </>
+                )}
+              </>
+            )}
+          </nav>
+        )}
       </div>
     </header>
   );

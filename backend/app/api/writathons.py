@@ -5,6 +5,7 @@ from app.core.database import get_db
 from app.models.entities import Writathon, WritathonStatus
 from app.schemas.all_schemas import WritathonCreate, WritathonUpdate, WritathonOut
 from app.api.deps import require_admin, require_staff_or_admin
+from app.core.audit import audit, diff
 
 router = APIRouter(prefix="/writathons", tags=["Writathons"])
 
@@ -33,6 +34,8 @@ def create_writathon(
         raise HTTPException(status_code=400, detail="Writathon with this code already exists.")
     writathon = Writathon(**payload.model_dump())
     db.add(writathon)
+    db.flush()
+    audit(db, admin, "writathon.create", "writathon", writathon.id, payload.model_dump())
     db.commit()
     db.refresh(writathon)
     return writathon
@@ -49,6 +52,13 @@ def update_writathon(
         raise HTTPException(status_code=404, detail="Writathon not found.")
 
     update_data = payload.model_dump(exclude_unset=True)
+    start = update_data.get("start_date", writathon.start_date)
+    deadline = update_data.get("submission_deadline", writathon.submission_deadline)
+    end = update_data.get("end_date", writathon.end_date)
+    naive = lambda d: d.replace(tzinfo=None) if d and d.tzinfo else d
+    if not (naive(start) <= naive(deadline) <= naive(end)):
+        raise HTTPException(status_code=400, detail="Dates must satisfy start_date <= submission_deadline <= end_date.")
+    audit(db, admin, "writathon.update", "writathon", writathon.id, diff(writathon, update_data))
     for field, value in update_data.items():
         setattr(writathon, field, value)
 

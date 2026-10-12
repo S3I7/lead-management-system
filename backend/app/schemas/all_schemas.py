@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from typing import Optional, List, Any, Literal
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 from app.models.entities import (
     UserRole, WritathonStatus, LeadStatus, StoryStatus,
     PlagiarismStatus, ReviewDecision, PaymentStatus, PublicationStatus,
@@ -48,7 +48,13 @@ class WritathonBase(BaseModel):
     status: WritathonStatus = WritathonStatus.ACTIVE
 
 class WritathonCreate(WritathonBase):
-    pass
+    submission_fee: float = Field(499.00, ge=0)
+
+    @model_validator(mode="after")
+    def check_dates(self):
+        if not (self.start_date <= self.submission_deadline <= self.end_date):
+            raise ValueError("Dates must satisfy start_date <= submission_deadline <= end_date.")
+        return self
 
 class WritathonUpdate(BaseModel):
     name: Optional[str] = None
@@ -57,7 +63,7 @@ class WritathonUpdate(BaseModel):
     end_date: Optional[datetime] = None
     submission_deadline: Optional[datetime] = None
     guidelines: Optional[str] = None
-    submission_fee: Optional[float] = None
+    submission_fee: Optional[float] = Field(None, ge=0)
     currency: Optional[str] = None
     status: Optional[WritathonStatus] = None
 
@@ -140,8 +146,8 @@ class StorySubmissionOut(BaseModel):
 # --- Plagiarism Review Schemas ---
 class PlagiarismReviewSubmit(BaseModel):
     status: PlagiarismStatus
-    plagiarism_notes: Optional[str] = None
-    reference_sources: Optional[str] = None
+    plagiarism_notes: Optional[str] = Field(None, max_length=10000)
+    reference_sources: Optional[str] = Field(None, max_length=10000)
 
 class PlagiarismReviewOut(BaseModel):
     id: int
@@ -160,8 +166,8 @@ class PlagiarismReviewOut(BaseModel):
 # --- Staff Review Schemas ---
 class StoryReviewSubmit(BaseModel):
     decision: ReviewDecision
-    feedback: Optional[str] = None  # Mandatory if NOT_ELIGIBLE
-    internal_notes: Optional[str] = None
+    feedback: Optional[str] = Field(None, max_length=10000)  # Mandatory if NOT_ELIGIBLE; sent to the parent
+    internal_notes: Optional[str] = Field(None, max_length=10000)  # staff only
 
 class StoryReviewOut(BaseModel):
     id: int
@@ -211,12 +217,14 @@ class PaymentWebhookPayload(BaseModel):
     gateway_payment_id: str
     amount: float
     status: str
+    currency: Optional[str] = None
 
 # --- Publication Schemas ---
 class PublicationUpdate(BaseModel):
     publication_status: PublicationStatus
-    publication_url: Optional[str] = None
-    publication_notes: Optional[str] = None
+    # shown to parents as a link, so only http(s) (no javascript: URLs)
+    publication_url: Optional[str] = Field(None, max_length=500, pattern=r"^(https?://\S+)?$")
+    publication_notes: Optional[str] = Field(None, max_length=5000)
 
 class PublicationOut(BaseModel):
     id: int
@@ -286,7 +294,85 @@ class LeadDetailOut(BaseModel):
 class LeadBulkUpdate(BaseModel):
     lead_ids: List[int] = Field(..., min_length=1, max_length=1000)
     owner_id: Optional[int] = None  # only applied when sent; null unassigns
-    status: Optional[LeadStatus] = None
+    status: Optional[LeadStatus] = None  # only the manual pre-submission statuses, see MANUAL_LEAD_STATUSES
+
+class AuditLogOut(BaseModel):
+    id: int
+    user_id: Optional[int] = None
+    user_name: Optional[str] = None
+    action: str
+    entity_type: str
+    entity_id: Optional[int] = None
+    changes: Optional[dict[str, Any]] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# --- Public (tracking ID) view: what a parent may see. No phone, internal notes, email bodies, file URLs or tokens. ---
+class PublicLeadOut(BaseModel):
+    lead_id: str
+    writathon_id: int
+    writathon_name: Optional[str] = None
+    parent_name: str
+    parent_email: str  # masked
+    child_name: str
+    child_age: Optional[int] = None
+    age_group: Optional[str] = None
+    submission_category: Optional[str] = None
+    school: str
+    grade: str
+    status: LeadStatus
+    submission_status: Optional[StoryStatus] = None
+    created_at: datetime
+
+class PublicSubmissionOut(BaseModel):
+    title: str
+    file_name: str
+    category: Optional[str] = None
+    word_count: Optional[int] = None
+    status: StoryStatus
+    submitted_at: datetime
+
+class PublicPlagiarismOut(BaseModel):
+    status: PlagiarismStatus
+
+class PublicReviewOut(BaseModel):
+    decision: ReviewDecision
+    feedback: Optional[str] = None
+    reviewed_at: datetime
+
+class PublicPaymentOut(BaseModel):
+    amount: float
+    currency: str
+    status: PaymentStatus
+    payment_link_token: Optional[str] = None  # only while the parent still needs to pay
+    link_expires_at: datetime
+    paid_at: Optional[datetime] = None
+
+class PublicPublicationOut(BaseModel):
+    publication_status: PublicationStatus
+    publication_url: Optional[str] = None
+    publication_notes: Optional[str] = None
+    published_at: Optional[datetime] = None
+
+class PublicCommunicationOut(BaseModel):
+    id: int
+    template: str
+    subject: str
+    status: CommStatus
+    sent_at: Optional[datetime] = None
+    created_at: datetime
+
+class PublicLeadDetailOut(BaseModel):
+    lead: PublicLeadOut
+    writathon: WritathonOut
+    submission: Optional[PublicSubmissionOut] = None
+    plagiarism_review: Optional[PublicPlagiarismOut] = None
+    story_review: Optional[PublicReviewOut] = None
+    payment: Optional[PublicPaymentOut] = None
+    publication: Optional[PublicPublicationOut] = None
+    communications: List[PublicCommunicationOut] = []
 
 class StudentOut(BaseModel):
     id: int
@@ -322,7 +408,11 @@ class WritathonReport(BaseModel):
     submissions: int
     not_submitted: int
 
-# --- Dashboard Stats Schema ---
+class OwnerCount(BaseModel):
+    owner_id: Optional[int] = None
+    owner_name: str
+    leads: int
+
 class DashboardStats(BaseModel):
     total_leads: int
     new_leads: int
@@ -341,3 +431,27 @@ class DashboardStats(BaseModel):
     total_students: int = 0
     unassigned_leads: int = 0
     by_writathon: List[WritathonReport] = []
+    # Metric definitions are in DATABASE_REVIEW.md / the dashboard API docstring
+    total_writathons: int = 0
+    total_submissions: int = 0
+    registered_not_submitted: int = 0
+    awaiting_review: int = 0
+    eligible_decisions: int = 0
+    not_eligible_decisions: int = 0
+    conversion_rate: float = 0.0
+    owner_distribution: List[OwnerCount] = []
+
+class StaffDashboardStats(BaseModel):
+    assigned_leads: int = 0
+    contacted: int = 0
+    reminder_sent: int = 0
+    stories_submitted: int = 0
+    under_review: int = 0
+    eligible: int = 0
+    not_eligible: int = 0
+    payment_pending: int = 0
+    paid: int = 0
+    completed: int = 0
+    published: int = 0
+    awaiting_review: int = 0
+    pending_tasks: int = 0

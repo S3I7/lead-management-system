@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.entities import (
     Lead, LeadStatus, StorySubmission, StoryStatus,
-    Payment, PaymentStatus, Publication, PublicationStatus, User
+    Payment, PaymentStatus, Publication, PublicationStatus, User, UserRole
 )
 from app.schemas.all_schemas import (
     PaymentOut, PaymentGenerateRequest, PaymentProcessRequest, PaymentWebhookPayload
@@ -17,7 +17,9 @@ from app.schemas.all_schemas import (
 from app.services.payment_service import PaymentService
 from app.services.email_service import EmailService
 from app.api.deps import require_staff_or_admin
+from app.core.audit import audit
 from app.core.config import settings
+from app.core.rate_limit import rate_limit
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
@@ -35,6 +37,11 @@ def generate_payment_link(
     story = db.query(StorySubmission).filter(StorySubmission.lead_id == lead.id).first()
     if not story:
         raise HTTPException(status_code=400, detail="Lead has not submitted any story yet.")
+    if payload.amount is not None and staff.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only an administrator can change the fee for a payment link.")
+    if payload.amount is not None and payload.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be positive.")
+    audit(db, staff, "payment.generate_link", "lead", lead.id, {"amount_override": payload.amount})
 
     return PaymentService.generate_payment_link(
         db=db,
@@ -44,7 +51,7 @@ def generate_payment_link(
         gateway=payload.gateway or "RAZORPAY"
     )
 
-@router.get("/by-token/{token}", response_model=PaymentOut)
+@router.get("/by-token/{token}", response_model=PaymentOut, dependencies=[Depends(rate_limit)])
 def get_payment_by_token(token: str, db: Session = Depends(get_db)):
     payment = db.query(Payment).filter(Payment.payment_link_token == token).first()
     if not payment:
@@ -70,6 +77,8 @@ def process_checkout(
 
     if payment.status == PaymentStatus.PAID:
         return payment
+    if payment.status == PaymentStatus.EXPIRED or payment.link_expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=410, detail="This payment link has expired. Please contact the Writathon team.")
 
     # Generate gateway transaction reference
     gateway_txn_id = payload.transaction_ref or f"pay_{uuid.uuid4().hex[:14]}"
@@ -100,6 +109,8 @@ async def payment_webhook(request: Request, db: Session = Depends(get_db)):
     payment = db.query(Payment).filter(Payment.payment_link_token == payload.payment_link_token).first()
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found.")
+    if payload.currency and payload.currency.upper() != payment.currency.upper():
+        raise HTTPException(status_code=400, detail="Payment currency does not match.")
     is_success = payload.status.lower() in ["captured", "paid", "succeeded", "success"]
     if is_success and round(payload.amount, 2) != round(float(payment.amount), 2):
         raise HTTPException(status_code=400, detail="Paid amount does not match the payment amount.")
@@ -123,6 +134,8 @@ def send_payment_reminder(
         raise HTTPException(status_code=404, detail="Payment not found.")
     if payment.status == PaymentStatus.PAID:
         raise HTTPException(status_code=400, detail="Payment has already been completed.")
+    if payment.status == PaymentStatus.EXPIRED:
+        raise HTTPException(status_code=400, detail="This payment link has expired; record the decision again to issue a new one.")
 
     EmailService.send_payment_link(db=db, lead=payment.lead, payment=payment)
     return {"message": "Payment reminder dispatched successfully."}

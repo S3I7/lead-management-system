@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api, Lead, User, Writathon } from '../../api/client';
 import { StatusBadge } from '../../components/StatusBadge';
-import { Search, RefreshCw, Users, ArrowRight, Download } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { Search, RefreshCw, Users, ArrowRight, Download, X } from 'lucide-react';
 
 const STATUS_FILTERS: { label: string; value: string }[] = [
   { label: 'All Leads', value: '' },
@@ -18,6 +19,8 @@ const STATUS_FILTERS: { label: string; value: string }[] = [
   { label: 'Completed', value: 'COMPLETED' },
 ];
 
+const MANUAL_STATUSES = ['NEW', 'CONTACTED', 'REMINDER_SENT'];
+
 const selectCls = 'px-3 py-2 rounded-xl border border-app-border bg-white text-xs outline-none focus:ring-2 focus:ring-primary';
 
 const toCsv = (rows: Lead[]) => {
@@ -28,40 +31,71 @@ const toCsv = (rows: Lead[]) => {
 };
 
 export const LeadsListPage: React.FC = () => {
+  const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [writathons, setWritathons] = useState<Writathon[]>([]);
   const [team, setTeam] = useState<User[]>([]);
-  const [statusFilter, setStatusFilter] = useState('');
-  const [writathonFilter, setWritathonFilter] = useState('');
-  const [ownerFilter, setOwnerFilter] = useState('');
-  const [submittedFilter, setSubmittedFilter] = useState('');
-  const [ageFilter, setAgeFilter] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
-  const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkOwner, setBulkOwner] = useState('');
   const [bulkStatus, setBulkStatus] = useState('');
   const [message, setMessage] = useState('');
+  const [total, setTotal] = useState(0);
 
-  const fetchLeads = async () => {
+  // Read filter values directly from URL searchParams (single source of truth)
+  const urlStatus = searchParams.get('status_filter') || searchParams.get('status') || '';
+  const statusFilter = STATUS_FILTERS.some((f) => f.value === urlStatus) ? urlStatus : '';
+  const paymentFilter = searchParams.get('payment_status') || '';
+  const writathonFilter = searchParams.get('writathon_id') || '';
+  const ownerFilter = searchParams.get('owner_id') || '';
+  const submittedFilter = searchParams.get('submitted') || '';
+  const ageFilter = searchParams.get('age_group') || '';
+  const categoryFilter = searchParams.get('submission_category') || '';
+  const urlSearch = searchParams.get('search') || '';
+
+  // Local state for search input text
+  const [searchInput, setSearchInput] = useState(urlSearch);
+
+  useEffect(() => {
+    setSearchInput(urlSearch);
+  }, [urlSearch]);
+
+  const updateParam = (key: string, value: string) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (value) {
+      nextParams.set(key, value);
+    } else {
+      nextParams.delete(key);
+      if (key === 'status_filter') nextParams.delete('status');
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const fetchLeads = async (activeRef = { current: true }) => {
     setIsLoading(true);
     try {
       const params = new URLSearchParams({ limit: '1000' });
       if (statusFilter) params.append('status_filter', statusFilter);
+      if (paymentFilter) params.append('payment_status', paymentFilter);
       if (writathonFilter) params.append('writathon_id', writathonFilter);
       if (ownerFilter) params.append('owner_id', ownerFilter);
       if (submittedFilter) params.append('submitted', submittedFilter);
       if (ageFilter) params.append('age_group', ageFilter);
       if (categoryFilter) params.append('submission_category', categoryFilter);
-      if (search.trim()) params.append('search', search.trim());
+      if (urlSearch.trim()) params.append('search', urlSearch.trim());
       const res = await api.get<Lead[]>(`/leads?${params.toString()}`);
+      if (!activeRef.current) return;
       setLeads(res.data);
+      setTotal(Number(res.headers['x-total-count'] ?? res.data.length));
       setSelected(new Set());
     } catch (err) {
+      if (!activeRef.current) return;
       console.error('Failed to fetch leads:', err);
     } finally {
-      setIsLoading(false);
+      if (activeRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -71,12 +105,29 @@ export const LeadsListPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchLeads();
-  }, [statusFilter, writathonFilter, ownerFilter, submittedFilter, ageFilter, categoryFilter]);
+    const activeRef = { current: true };
+    fetchLeads(activeRef);
+    return () => {
+      activeRef.current = false;
+    };
+  }, [statusFilter, paymentFilter, writathonFilter, ownerFilter, submittedFilter, ageFilter, categoryFilter, urlSearch]);
+
+  const handleStatusFilterClick = (value: string) => {
+    updateParam('status_filter', value);
+  };
+
+  const handleClearPaymentFilter = () => {
+    updateParam('payment_status', '');
+  };
+
+  const handleResetAllFilters = () => {
+    setSearchInput('');
+    setSearchParams({}, { replace: true });
+  };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchLeads();
+    updateParam('search', searchInput.trim());
   };
 
   const toggle = (id: number) => {
@@ -89,15 +140,24 @@ export const LeadsListPage: React.FC = () => {
   const applyBulk = async (body: { owner_id?: number | null; status?: string }) => {
     try {
       const res = await api.post('/leads/bulk-update', { lead_ids: [...selected], ...body });
-      setMessage(`Updated ${res.data.updated} lead(s).`);
+      const skipped: { id: number; reason: string }[] = res.data.skipped ?? [];
+      setMessage(`Updated ${res.data.updated} lead(s).` + (skipped.length ? ` Skipped ${skipped.length}: ${skipped[0].reason}` : ''));
       fetchLeads();
     } catch (err: any) {
       setMessage(err.response?.data?.detail || 'Bulk update failed.');
     }
   };
 
-  const exportCsv = () => {
+  const exportCsv = async () => {
     const rows = selected.size ? leads.filter((l) => selected.has(l.id)) : leads;
+    try {
+      await api.post('/leads/export-audit', {
+        count: rows.length,
+        lead_ids: rows.map((r) => r.id),
+      });
+    } catch (err) {
+      console.warn('Failed to audit lead export:', err);
+    }
     const url = URL.createObjectURL(new Blob([toCsv(rows)], { type: 'text/csv' }));
     const a = document.createElement('a');
     a.href = url;
@@ -120,7 +180,7 @@ export const LeadsListPage: React.FC = () => {
               </p>
             </div>
             <button
-              onClick={fetchLeads}
+              onClick={() => fetchLeads()}
               aria-label="Refresh"
               className="p-2.5 rounded-full bg-white border border-app-border text-gray-500 hover:text-black self-start md:self-auto"
             >
@@ -135,30 +195,38 @@ export const LeadsListPage: React.FC = () => {
               <input
                 type="text"
                 placeholder="Search by Lead ID, Child, Parent, Email, School, or City..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 rounded-xl border border-app-border bg-white text-xs outline-none focus:ring-2 focus:ring-primary shadow-xs"
               />
             </form>
-            <select aria-label="Writathon" value={writathonFilter} onChange={(e) => setWritathonFilter(e.target.value)} className={selectCls}>
+            <select aria-label="Writathon" value={writathonFilter} onChange={(e) => updateParam('writathon_id', e.target.value)} className={selectCls}>
               <option value="">All Writathons</option>
               {writathons.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select>
-            <select aria-label="Lead owner" value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)} className={selectCls}>
-              <option value="">All owners</option>
-              <option value="0">Unassigned</option>
-              {team.map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-            </select>
-            <select aria-label="Submission" value={submittedFilter} onChange={(e) => setSubmittedFilter(e.target.value)} className={selectCls}>
+            {user?.role === 'ADMIN' ? (
+              <select aria-label="Lead owner" value={ownerFilter} onChange={(e) => updateParam('owner_id', e.target.value)} className={selectCls}>
+                <option value="">All owners</option>
+                <option value="0">Unassigned</option>
+                {team.map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+              </select>
+            ) : (
+              <select aria-label="Lead owner" value={ownerFilter} onChange={(e) => updateParam('owner_id', e.target.value)} className={selectCls}>
+                <option value="">My assigned & unassigned</option>
+                <option value={String(user?.id || '')}>Only my leads</option>
+                <option value="0">Unassigned</option>
+              </select>
+            )}
+            <select aria-label="Submission" value={submittedFilter} onChange={(e) => updateParam('submitted', e.target.value)} className={selectCls}>
               <option value="">Any submission</option>
               <option value="true">Story submitted</option>
               <option value="false">Not submitted yet</option>
             </select>
-            <select aria-label="Age group" value={ageFilter} onChange={(e) => setAgeFilter(e.target.value)} className={selectCls}>
+            <select aria-label="Age group" value={ageFilter} onChange={(e) => updateParam('age_group', e.target.value)} className={selectCls}>
               <option value="">All ages</option>
               {['8-10', '11-13', '14-18'].map((a) => <option key={a} value={a}>{a.replace('-', '–')} yrs</option>)}
             </select>
-            <select aria-label="Category" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className={selectCls}>
+            <select aria-label="Category" value={categoryFilter} onChange={(e) => updateParam('submission_category', e.target.value)} className={selectCls}>
               <option value="">All categories</option>
               {['Short Story', 'Poem', 'Novella', 'Comics'].map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -168,7 +236,7 @@ export const LeadsListPage: React.FC = () => {
             {STATUS_FILTERS.map((f) => (
               <button
                 key={f.value}
-                onClick={() => setStatusFilter(f.value)}
+                onClick={() => handleStatusFilterClick(f.value)}
                 className={`px-3 py-1.5 rounded-pill text-xs font-semibold whitespace-nowrap transition ${
                   statusFilter === f.value
                     ? 'bg-primary text-white shadow-xs'
@@ -178,6 +246,26 @@ export const LeadsListPage: React.FC = () => {
                 {f.label}
               </button>
             ))}
+            {paymentFilter && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-pill text-xs font-semibold whitespace-nowrap bg-teal-50 text-teal-800 border border-teal-200 shadow-xs">
+                Payment: {paymentFilter}
+                <button
+                  onClick={handleClearPaymentFilter}
+                  aria-label="Remove payment filter"
+                  className="hover:text-teal-950 p-0.5 rounded-full"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {(statusFilter || paymentFilter || writathonFilter || ownerFilter || submittedFilter || ageFilter || categoryFilter || urlSearch) && (
+              <button
+                onClick={handleResetAllFilters}
+                className="px-2.5 py-1 text-xs text-text-muted hover:text-red-600 underline whitespace-nowrap ml-auto"
+              >
+                Reset filters
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -186,25 +274,30 @@ export const LeadsListPage: React.FC = () => {
         {/* Bulk actions */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="font-semibold text-text-dark">
-            {leads.length} lead(s){selected.size > 0 && ` · ${selected.size} selected`}
+            {total > leads.length ? `Showing ${leads.length} of ${total} leads (narrow with filters)` : `${leads.length} lead(s)`}{selected.size > 0 && ` · ${selected.size} selected`}
           </span>
           {selected.size > 0 && (
             <>
-              <select aria-label="Assign owner" value={bulkOwner} onChange={(e) => setBulkOwner(e.target.value)} className={selectCls}>
-                <option value="">Assign to…</option>
-                <option value="none">Unassign</option>
-                {team.map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-              </select>
-              <button
-                disabled={!bulkOwner}
-                onClick={() => applyBulk({ owner_id: bulkOwner === 'none' ? null : Number(bulkOwner) })}
-                className="btn-secondary text-xs py-1.5 px-3"
-              >
-                Apply owner
-              </button>
+              {user?.role === 'ADMIN' && (
+                <>
+                  <select aria-label="Assign owner" value={bulkOwner} onChange={(e) => setBulkOwner(e.target.value)} className={selectCls}>
+                    <option value="">Assign to…</option>
+                    <option value="none">Unassign</option>
+                    {team.map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                  </select>
+                  <button
+                    disabled={!bulkOwner}
+                    onClick={() => applyBulk({ owner_id: bulkOwner === 'none' ? null : Number(bulkOwner) })}
+                    className="btn-secondary text-xs py-1.5 px-3"
+                  >
+                    Apply owner
+                  </button>
+                </>
+              )}
               <select aria-label="Set status" value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value)} className={selectCls}>
                 <option value="">Set status…</option>
-                {STATUS_FILTERS.slice(1).map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                {/* Later statuses follow the workflow (submission, review, payment); the API rejects them here */}
+                {STATUS_FILTERS.filter((f) => MANUAL_STATUSES.includes(f.value)).map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
               </select>
               <button disabled={!bulkStatus} onClick={() => applyBulk({ status: bulkStatus })} className="btn-secondary text-xs py-1.5 px-3">
                 Apply status

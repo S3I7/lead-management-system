@@ -211,6 +211,22 @@ export interface DashboardStats {
   by_writathon: WritathonReport[];
 }
 
+export interface StaffDashboardStats {
+  assigned_leads: number;
+  contacted: number;
+  reminder_sent: number;
+  stories_submitted: number;
+  under_review: number;
+  eligible: number;
+  not_eligible: number;
+  payment_pending: number;
+  paid: number;
+  completed: number;
+  published: number;
+  awaiting_review: number;
+  pending_tasks: number;
+}
+
 export interface WritathonReport {
   writathon_id: number;
   writathon_name: string;
@@ -251,3 +267,28 @@ export interface EmailTemplate {
   created_at: string;
   updated_at: string;
 }
+
+// What the public tracking-ID lookup returns: the parent's view, without contact details, internal notes,
+// files or email bodies (the backend never sends those fields here).
+export interface PublicLeadDetail {
+  lead: Pick<Lead, 'lead_id' | 'writathon_id' | 'writathon_name' | 'parent_name' | 'parent_email' | 'child_name' | 'child_age'
+    | 'age_group' | 'submission_category' | 'school' | 'grade' | 'status' | 'submission_status' | 'created_at'>;
+  writathon: Writathon;
+  submission?: Pick<StorySubmission, 'title' | 'file_name' | 'category' | 'word_count' | 'status' | 'submitted_at'>;
+  plagiarism_review?: Pick<ManualPlagiarismReview, 'status'>;
+  story_review?: Pick<StoryReview, 'decision' | 'feedback' | 'reviewed_at'>;
+  payment?: Pick<Payment, 'amount' | 'currency' | 'status' | 'link_expires_at' | 'paid_at'> & { payment_link_token?: string | null };
+  publication?: Pick<Publication, 'publication_status' | 'publication_url' | 'publication_notes' | 'published_at'>;
+  communications: Pick<CommunicationLog, 'id' | 'template' | 'subject' | 'status' | 'sent_at' | 'created_at'>[];
+}
+
+// Story files are private: fetch with the staff token, then hand the browser a temporary blob URL.
+export const downloadStory = async (submission: Pick<StorySubmission, 'file_url' | 'file_name'>) => {
+  const res = await api.get(submission.file_url.replace(/^\/api\/v1/, ''), { responseType: 'blob' });
+  const url = URL.createObjectURL(res.data);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = submission.file_name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+};

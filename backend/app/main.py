@@ -1,11 +1,13 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.database import SessionLocal, engine, Base
+from app.core.database import SessionLocal, engine, Base, get_db
 from app.seed import seed_database
 from app.services.reminder_scheduler import ReminderSchedulerService
 
@@ -22,6 +24,25 @@ from app.api.dashboard import router as dashboard_router
 from app.api.scheduler import router as scheduler_router
 from app.api.students import router as students_router
 from app.api.users import router as users_router
+from app.api.audit import router as audit_router
+from app.models.entities import Student, Lead
+from sqlalchemy.schema import CreateIndex
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger("app")
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
+def ensure_constraints():
+    """create_all only builds indexes for new tables; add the uniqueness indexes to databases created earlier."""
+    for table in (Student.__table__, Lead.__table__):
+        for idx in table.indexes:
+            if idx.unique:
+                try:  # IF NOT EXISTS: the inspector behind checkfirst can't see SQLite expression indexes
+                    with engine.begin() as conn:
+                        conn.execute(CreateIndex(idx, if_not_exists=True))
+                except Exception:
+                    logger.exception("Could not create unique index %s: remove duplicate rows, then restart", idx.name)
 
 async def periodic_reminder_task():
     """Background worker that periodically triggers the scheduled reminder job."""
@@ -35,13 +56,15 @@ async def periodic_reminder_task():
                 db.close()
         except asyncio.CancelledError:
             break
-        except Exception as e:
+        except Exception:
+            logger.exception("Reminder job failed")
             await asyncio.sleep(60)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: ensure tables & run seeder
     Base.metadata.create_all(bind=engine)
+    ensure_constraints()
     db = SessionLocal()
     try:
         seed_database(db)
@@ -63,10 +86,11 @@ app = FastAPI(
 # CORS setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()],
+    allow_credentials=False,  # auth is a bearer header, not cookies
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
+    expose_headers=["X-Total-Count"],
 )
 
 # API routers
@@ -84,10 +108,21 @@ app.include_router(dashboard_router, prefix=api_prefix)
 app.include_router(scheduler_router, prefix=api_prefix)
 app.include_router(students_router, prefix=api_prefix)
 app.include_router(users_router, prefix=api_prefix)
+app.include_router(audit_router, prefix=api_prefix)
 
 @app.get("/health")
-def health_check():
-    return {"status": "healthy", "service": "Writathon CRM Backend", "version": "1.0.0"}
+def health_check(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+        db_status = "connected"
+    except Exception as e:
+        db_status = f"unhealthy: {str(e)}"
+    return {
+        "status": "healthy" if db_status == "connected" else "degraded",
+        "database": db_status,
+        "service": "Writathon CRM Backend",
+        "version": "1.0.0"
+    }
 
 @app.get("/")
 def root():

@@ -1,4 +1,7 @@
-import requests
+try:
+    import requests
+except ImportError:
+    import httpx as requests
 import uuid
 
 BASE_URL = "http://127.0.0.1:8000/api/v1"
@@ -102,7 +105,7 @@ def run_tests():
     payment_info = r_lead_pay.json()["payment"]
     assert payment_info is not None, "Payment record was not generated!"
     payment_token = payment_info["payment_link_token"]
-    print(f"Generated Payment Link: {payment_info['payment_link']} (Amount: {payment_info['amount']} {payment_info['currency']})")
+    print(f"Payment link token issued (Amount: {payment_info['amount']} {payment_info['currency']}); the full link is emailed, not shown publicly")
 
     # Parent completes checkout via simulated gateway (UPI/Card)
     checkout_payload = {

@@ -8,6 +8,7 @@ from app.core.security import get_password_hash
 from app.models.entities import User, UserRole
 from app.schemas.all_schemas import UserCreate, UserOut
 from app.api.deps import require_staff_or_admin, require_admin
+from app.core.audit import audit, diff
 
 router = APIRouter(prefix="/users", tags=["Team & Access"])
 
@@ -30,6 +31,8 @@ def create_team_member(payload: UserCreate, db: Session = Depends(get_db), admin
     user = User(email=email, full_name=payload.full_name.strip(), role=payload.role,
                 hashed_password=get_password_hash(payload.password), is_active=True)
     db.add(user)
+    db.flush()
+    audit(db, admin, "user.create", "user", user.id, {"email": email, "role": payload.role})
     db.commit()
     db.refresh(user)
     return user
@@ -41,6 +44,7 @@ def update_team_member(user_id: int, payload: UserUpdate, db: Session = Depends(
         raise HTTPException(status_code=404, detail="User not found.")
     if user.id == admin.id:
         raise HTTPException(status_code=400, detail="You cannot change your own role or access.")
+    audit(db, admin, "user.update", "user", user.id, diff(user, payload.model_dump(exclude_none=True)))
     if payload.role is not None:
         user.role = payload.role
     if payload.is_active is not None:

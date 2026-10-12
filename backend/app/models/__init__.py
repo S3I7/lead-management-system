@@ -8,7 +8,8 @@ from app.models.entities import (
     Payment, PaymentStatus,
     Publication, PublicationStatus,
     EmailTemplate, TemplateCode,
-    CommunicationLog, CommStatus
+    CommunicationLog, CommStatus,
+    AuditLog
 )
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     "Payment", "PaymentStatus",
     "Publication", "PublicationStatus",
     "EmailTemplate", "TemplateCode",
-    "CommunicationLog", "CommStatus"
+    "CommunicationLog", "CommStatus",
+    "AuditLog"
 ]

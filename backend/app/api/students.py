@@ -13,7 +13,7 @@ router = APIRouter(prefix="/students", tags=["Students"])
 @router.get("", response_model=List[StudentOut])
 def list_students(
     search: Optional[str] = None,
-    skip: int = 0,
+    skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db),
     staff = Depends(require_staff_or_admin)

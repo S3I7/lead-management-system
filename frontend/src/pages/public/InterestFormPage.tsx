@@ -37,6 +37,7 @@ export const InterestFormPage: React.FC = () => {
   const [parentLast, setParentLast] = useState('');
   const [parentEmail, setParentEmail] = useState('');
   const [countryCode, setCountryCode] = useState('+91');
+  const [customCode, setCustomCode] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
   const [ageGroup, setAgeGroup] = useState('');
   const [category, setCategory] = useState('');
@@ -85,7 +86,7 @@ export const InterestFormPage: React.FC = () => {
         child_name: `${childFirst.trim()} ${childLast.trim()}`,
         parent_name: `${parentFirst.trim()} ${parentLast.trim()}`,
         parent_email: parentEmail,
-        parent_phone: `${countryCode} ${whatsapp.trim()}`,
+        parent_phone: `${countryCode === 'other' ? '+' + customCode.trim().replace(/^\+/, '') : countryCode} ${whatsapp.trim()}`,
         age_group: ageGroup,
         submission_category: category,
         grade,
@@ -218,7 +219,7 @@ export const InterestFormPage: React.FC = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <TextField label="Participant First Name *" value={childFirst} onChange={setChildFirst} placeholder="e.g. Aarav" />
-                  <TextField label="Participant Last Name *" value={childLast} onChange={setChildLast} placeholder="e.g. Sharma" />
+                  <TextField label="Participant Last Name *" value={childLast} onChange={setChildLast} />
 
                   <div>
                     <label htmlFor="age-group" className={labelCls}>Age Group *</label>
@@ -255,7 +256,7 @@ export const InterestFormPage: React.FC = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <TextField label="Parent/Guardian First Name *" value={parentFirst} onChange={setParentFirst} placeholder="e.g. Rajesh" />
-                  <TextField label="Parent/Guardian Last Name *" value={parentLast} onChange={setParentLast} placeholder="e.g. Sharma" />
+                  <TextField label="Parent/Guardian Last Name *" value={parentLast} onChange={setParentLast} />
                   <TextField label="Email Address *" type="email" value={parentEmail} onChange={setParentEmail} placeholder="parent@gmail.com" pattern="[^@\s]+@[^@\s]+\.[^@\s]+" title="Enter a full email address, e.g. name@gmail.com" />
 
                   <div>
@@ -265,20 +266,35 @@ export const InterestFormPage: React.FC = () => {
                         aria-label="Country code"
                         value={countryCode}
                         onChange={(e) => setCountryCode(e.target.value)}
-                        className="px-2 py-2.5 rounded-xl border border-app-border focus:ring-2 focus:ring-primary outline-none text-sm bg-white"
+                        className="w-28 shrink-0 px-2 py-2.5 rounded-xl border border-app-border focus:ring-2 focus:ring-primary outline-none text-sm bg-white"
                       >
                         {COUNTRY_CODES.map(([code, name]) => <option key={code} value={code}>{code} {name}</option>)}
+                        <option value="other">Other…</option>
                       </select>
+                      {countryCode === 'other' && (
+                        <input
+                          id="custom-country-code"
+                          aria-label="Your country code"
+                          type="tel"
+                          inputMode="tel"
+                          pattern="\+?[0-9]{1,4}"
+                          title="Country code: 1 to 4 digits, e.g. +971"
+                          placeholder="+code"
+                          value={customCode}
+                          onChange={(e) => setCustomCode(e.target.value)}
+                          className="w-20 shrink-0 px-2 py-2.5 rounded-xl border border-app-border focus:ring-2 focus:ring-primary outline-none text-sm bg-white"
+                          required
+                        />
+                      )}
                       <input
                         id="whatsapp"
                         type="tel"
                         inputMode="numeric"
                         pattern="[0-9 ]{6,15}"
                         title="6 to 15 digits"
-                        placeholder="98765 43210"
                         value={whatsapp}
                         onChange={(e) => setWhatsapp(e.target.value)}
-                        className={inputCls}
+                        className={`${inputCls} flex-1 min-w-0`}
                         required
                       />
                     </div>

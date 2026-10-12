@@ -17,6 +17,6 @@ def run_reminder_batch(
     result = ReminderSchedulerService.process_pending_reminders(db)
     return {
         "status": "success",
-        "message": f"Processed {result['processed']} leads. Dispatched {result['sent']} reminder emails, skipped {result['skipped']}.",
+        "message": result.get("error") or f"Processed {result['processed']} leads. Dispatched {result['sent']} reminder emails, skipped {result['skipped']}.",
         "data": result
     }

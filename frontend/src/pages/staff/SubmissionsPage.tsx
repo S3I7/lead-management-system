@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api, SubmissionListItem, Writathon } from '../../api/client';
 import { StatusBadge } from '../../components/StatusBadge';
 
@@ -7,18 +7,68 @@ const STORY_STATUSES = ['SUBMITTED', 'UNDER_REVIEW', 'ELIGIBLE', 'NOT_ELIGIBLE',
 const selectCls = 'px-3 py-2 rounded-xl border border-app-border bg-white text-xs outline-none focus:ring-2 focus:ring-primary';
 
 export const SubmissionsPage: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState<SubmissionListItem[]>([]);
   const [writathons, setWritathons] = useState<Writathon[]>([]);
-  const [writathonId, setWritathonId] = useState('');
-  const [status, setStatus] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => { api.get<Writathon[]>('/writathons').then((r) => setWritathons(r.data)); }, []);
+  // Single source of truth from URL search parameters
+  const urlStatus = searchParams.get('status_filter') || searchParams.get('status') || '';
+  const status = STORY_STATUSES.includes(urlStatus) ? urlStatus : '';
+  const writathonId = searchParams.get('writathon_id') || '';
+
   useEffect(() => {
+    api.get<Writathon[]>('/writathons').then((r) => setWritathons(r.data)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+
     const params = new URLSearchParams({ limit: '1000' });
     if (writathonId) params.append('writathon_id', writathonId);
     if (status) params.append('status_filter', status);
-    api.get<SubmissionListItem[]>(`/submissions?${params}`).then((r) => setItems(r.data));
+
+    api.get<SubmissionListItem[]>(`/submissions?${params.toString()}`)
+      .then((r) => {
+        if (!active) return;
+        setItems(r.data);
+      })
+      .catch((err) => {
+        if (!active) return;
+        console.error('Failed to fetch submissions:', err);
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, [writathonId, status]);
+
+  const updateParam = (key: string, value: string) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (value) {
+      nextParams.set(key, value);
+    } else {
+      nextParams.delete(key);
+      if (key === 'status_filter') nextParams.delete('status');
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const handleStatusChange = (val: string) => {
+    updateParam('status_filter', val);
+  };
+
+  const handleWritathonChange = (val: string) => {
+    updateParam('writathon_id', val);
+  };
+
+  const handleClearFilters = () => {
+    setSearchParams({}, { replace: true });
+  };
 
   return (
     <div className="min-h-screen bg-app-bg pb-20">
@@ -26,15 +76,23 @@ export const SubmissionsPage: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h1 className="text-2xl md:text-3xl font-heading font-extrabold text-text-dark">Story Submissions</h1>
           <p className="text-xs text-text-muted mt-1">Every submitted story, linked to its registration and Writathon.</p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <select aria-label="Writathon" value={writathonId} onChange={(e) => setWritathonId(e.target.value)} className={selectCls}>
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <select aria-label="Writathon" value={writathonId} onChange={(e) => handleWritathonChange(e.target.value)} className={selectCls}>
               <option value="">All Writathons</option>
               {writathons.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select>
-            <select aria-label="Story status" value={status} onChange={(e) => setStatus(e.target.value)} className={selectCls}>
+            <select aria-label="Story status" value={status} onChange={(e) => handleStatusChange(e.target.value)} className={selectCls}>
               <option value="">Any status</option>
               {STORY_STATUSES.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
             </select>
+            {(status || writathonId) && (
+              <button
+                onClick={handleClearFilters}
+                className="px-2.5 py-1 text-xs text-text-muted hover:text-red-600 underline"
+              >
+                Clear filters
+              </button>
+            )}
           </div>
         </div>
       </section>

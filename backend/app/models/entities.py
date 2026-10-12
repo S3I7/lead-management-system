@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 import enum
 from sqlalchemy import (
-    Column, Integer, String, Text, DateTime, Date, ForeignKey, 
-    Boolean, Numeric, Enum as SQLEnum
+    Column, Integer, String, Text, DateTime, Date, ForeignKey,
+    Boolean, Numeric, Enum as SQLEnum, Index, JSON, func
 )
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -134,6 +134,9 @@ class Student(Base):
 
     leads = relationship("Lead", back_populates="student")
 
+    # Same parent email + child name = same student; enforced in the DB so concurrent registrations can't duplicate
+    __table_args__ = (Index("uq_student_identity", "parent_email", func.lower(child_name), unique=True),)
+
 
 class Lead(Base):
     __tablename__ = "leads"
@@ -169,6 +172,9 @@ class Lead(Base):
     submissions = relationship("StorySubmission", back_populates="lead", cascade="all, delete-orphan")
     communications = relationship("CommunicationLog", back_populates="lead", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="lead", cascade="all, delete-orphan")
+
+    # One registration per student per Writathon (also stops concurrent duplicate registrations)
+    __table_args__ = (Index("uq_lead_writathon_student", "writathon_id", "student_id", unique=True),)
 
     @property
     def writathon_name(self):
@@ -310,3 +316,18 @@ class CommunicationLog(Base):
     created_at = Column(DateTime, default=utcnow, nullable=False)
 
     lead = relationship("Lead", back_populates="communications")
+
+
+class AuditLog(Base):
+    """Append-only record of staff/system actions. No API updates or deletes these rows."""
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)  # null = system/public action
+    action = Column(String(100), nullable=False, index=True)  # e.g. lead.assign, review.decision
+    entity_type = Column(String(50), nullable=False)
+    entity_id = Column(Integer, nullable=True)
+    changes = Column(JSON, nullable=True)  # {"field": [old, new]}
+    created_at = Column(DateTime, default=utcnow, nullable=False, index=True)
+
+    user = relationship("User")

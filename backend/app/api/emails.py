@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
@@ -14,6 +14,7 @@ from app.schemas.all_schemas import (
 )
 from app.services.email_service import EmailService, DEFAULT_TEMPLATES
 from app.api.deps import require_staff_or_admin, require_admin
+from app.core.audit import audit, diff
 
 router = APIRouter(prefix="/emails", tags=["Email Templates & Communications"])
 
@@ -47,6 +48,7 @@ def update_email_template(
         raise HTTPException(status_code=404, detail="Email template not found.")
 
     data = payload.model_dump(exclude_unset=True)
+    audit(db, admin, "email_template.update", "email_template", tmpl.id, diff(tmpl, data))
     for k, v in data.items():
         setattr(tmpl, k, v)
 
@@ -102,8 +104,8 @@ def list_communications(
     lead_id: Optional[int] = None,
     template: Optional[str] = None,
     recipient: Optional[str] = None,
-    skip: int = 0,
-    limit: int = 50,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
     db: Session = Depends(get_db),
     staff: User = Depends(require_staff_or_admin)
 ):
@@ -133,11 +135,10 @@ def resend_communication(
         recipient=comm.recipient,
         subject=comm.subject,
         body_content=comm.body_content,
-        status=CommStatus.SENT,
-        sent_at=datetime.now(timezone.utc),
-        error_message=None
     )
+    EmailService.deliver(new_comm)
     db.add(new_comm)
+    audit(db, staff, "email.resend", "communication_log", comm.id, {"lead_id": comm.lead_id, "template": comm.template})
     db.commit()
     db.refresh(new_comm)
     return new_comm

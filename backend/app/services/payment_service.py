@@ -8,8 +8,12 @@ from app.models.entities import (
     Lead, LeadStatus, StorySubmission, StoryStatus,
     Payment, PaymentStatus, Publication, PublicationStatus
 )
+import logging
 from app.services.email_service import EmailService
+from app.core.audit import audit
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 class PaymentService:
     @staticmethod
@@ -94,9 +98,30 @@ class PaymentService:
 
         now = datetime.now(timezone.utc)
         if not is_successful:
-            payment.status = PaymentStatus.FAILED
+            if payment.status != PaymentStatus.EXPIRED:
+                audit(db, None, "payment.status", "payment", payment.id, {"status": [payment.status, PaymentStatus.FAILED]})
+                payment.status = PaymentStatus.FAILED
             db.commit()
             db.refresh(payment)
+            return payment
+
+        # Atomic claim: if two confirmations for the same payment arrive together, only one proceeds
+        claimed = db.query(Payment).filter(Payment.id == payment.id, Payment.status != PaymentStatus.PAID).update(
+            {Payment.status: PaymentStatus.PAID, Payment.gateway_payment_id: gateway_payment_id, Payment.paid_at: now},
+            synchronize_session=False)
+        if not claimed:
+            db.rollback()
+            db.refresh(payment)
+            return payment
+        audit(db, None, "payment.status", "payment", payment.id,
+              {"status": [payment.status, PaymentStatus.PAID], "gateway_payment_id": gateway_payment_id})
+        db.refresh(payment)
+        if payment.story.status != StoryStatus.ELIGIBLE:
+            # Money was captured but the story is no longer eligible (decision reversed): record it, flag for refund
+            audit(db, None, "payment.needs_manual_review", "payment", payment.id, {"story_status": payment.story.status})
+            logger.error("Payment %s captured for story %s in status %s: needs manual handling/refund",
+                         payment.id, payment.story_id, payment.story.status.value)
+            db.commit()
             return payment
 
         # Transition states strictly according to Step 5 / Section 24:
@@ -104,10 +129,6 @@ class PaymentService:
         # Payment Status = PAID
         # Story Status = APPROVED
         # Publication Status = READY
-        payment.status = PaymentStatus.PAID
-        payment.gateway_payment_id = gateway_payment_id
-        payment.paid_at = now
-
         lead = payment.lead
         story = payment.story
 

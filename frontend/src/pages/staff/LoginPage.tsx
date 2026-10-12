@@ -45,7 +45,7 @@ const ROLES: RolePreset[] = [
     password: 'staff123',
     icon: UserCheck,
     description: 'Story review queue, manual originality check & eligibility decisions.',
-    destination: '/admin/dashboard',
+    destination: '/staff/dashboard',
     colorClass: {
       activeBorder: 'border-secondary ring-2 ring-secondary/20',
       activeBg: 'bg-secondary-soft/60',
@@ -96,10 +96,12 @@ export const LoginPage: React.FC = () => {
     try {
       const loggedUser = await login(email, password);
       // Route based on authenticated user role
-      if (loggedUser.role === 'PARENT') {
-        navigate('/status');
-      } else {
+      if (loggedUser.role === 'ADMIN') {
         navigate('/admin/dashboard');
+      } else if (loggedUser.role === 'STAFF') {
+        navigate('/staff/dashboard');
+      } else {
+        navigate('/status');
       }
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Invalid email or password. Please try again.');

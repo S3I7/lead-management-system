@@ -1,7 +1,8 @@
 from datetime import datetime, timezone, timedelta
 import logging
 from sqlalchemy.orm import Session
-from app.models.entities import Lead, LeadStatus, StorySubmission, Writathon, WritathonStatus
+from sqlalchemy.orm import selectinload
+from app.models.entities import Lead, LeadStatus, StorySubmission, Writathon, WritathonStatus, CommStatus
 from app.services.email_service import EmailService
 from app.core.config import settings
 
@@ -19,8 +20,17 @@ class ReminderSchedulerService:
         4. Configurable intervals: Day 3, Day 7, Day 14 after registration.
         """
         now = datetime.now(timezone.utc)
-        leads = db.query(Lead).filter(
-            Lead.status.in_([LeadStatus.NEW, LeadStatus.CONTACTED, LeadStatus.REMINDER_SENT])
+        if not settings.SMTP_HOST:
+            # Nothing can be delivered; don't pile up undelivered reminder rows every hour
+            return {"timestamp": now.isoformat(), "processed": 0, "sent": 0, "skipped": 0,
+                    "details": [], "error": "SMTP is not configured; no reminders were sent."}
+        # Narrow in SQL: no story yet, Writathon active and before its deadline, reminders left
+        leads = db.query(Lead).join(Writathon, Lead.writathon_id == Writathon.id).options(selectinload(Lead.writathon)).filter(
+            Lead.status.in_([LeadStatus.NEW, LeadStatus.CONTACTED, LeadStatus.REMINDER_SENT]),
+            ~Lead.submissions.any(),
+            Writathon.status == WritathonStatus.ACTIVE,
+            Writathon.submission_deadline >= now.replace(tzinfo=None),
+            Lead.reminder_count < len(settings.REMINDER_DAYS_CONFIG),
         ).all()
         
         sent_count = 0
@@ -69,8 +79,7 @@ class ReminderSchedulerService:
             # Also ensure at least 24h since last reminder
             is_due = False
             if lead.last_reminder_sent_at is None:
-                if days_since_created >= target_day or days_since_created >= 0.001:  # Eligible for 1st reminder
-                    is_due = True
+                is_due = days_since_created >= target_day
             else:
                 last_sent = lead.last_reminder_sent_at
                 if last_sent.tzinfo is None:
@@ -81,7 +90,11 @@ class ReminderSchedulerService:
 
             if is_due:
                 try:
-                    EmailService.send_submission_reminder(db=db, lead=lead, writathon=writathon)
+                    comm = EmailService.send_submission_reminder(db=db, lead=lead, writathon=writathon)
+                    if comm.status != CommStatus.SENT:
+                        # Not delivered: don't count it, so the reminder is retried on the next run
+                        details.append({"lead_id": lead.lead_id, "status": "error", "error": comm.error_message})
+                        continue
                     lead.reminder_count += 1
                     lead.last_reminder_sent_at = now
                     lead.status = LeadStatus.REMINDER_SENT

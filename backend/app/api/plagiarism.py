@@ -8,6 +8,7 @@ from app.models.entities import (
 )
 from app.schemas.all_schemas import PlagiarismReviewSubmit, PlagiarismReviewOut
 from app.api.deps import require_staff_or_admin
+from app.core.audit import audit
 
 router = APIRouter(prefix="/plagiarism", tags=["Manual Plagiarism Review"])
 
@@ -26,8 +27,14 @@ def record_manual_plagiarism_check(
     if not story:
         raise HTTPException(status_code=404, detail="Story submission not found.")
 
+    if story.status in (StoryStatus.APPROVED, StoryStatus.PUBLISHED):
+        raise HTTPException(status_code=409, detail="Payment for this story is complete; the plagiarism check is locked.")
+
     review = db.query(ManualPlagiarismReview).filter(ManualPlagiarismReview.story_id == story_id).first()
     now = datetime.now(timezone.utc)
+    audit(db, reviewer, "plagiarism.check", "story_submission", story.id,
+          {"status": [review.status if review else None, payload.status],
+           "previous_reviewer_id": review.reviewer_id if review else None})
 
     if not review:
         review = ManualPlagiarismReview(
@@ -50,6 +57,8 @@ def record_manual_plagiarism_check(
     lead = story.lead
     if lead and lead.status == LeadStatus.STORY_SUBMITTED:
         lead.status = LeadStatus.UNDER_REVIEW
+    if story.status == StoryStatus.SUBMITTED:
+        story.status = StoryStatus.UNDER_REVIEW
 
     db.commit()
     db.refresh(review)

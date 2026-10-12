@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api, LeadDetail, PlagiarismStatus, ReviewDecision, PublicationStatus } from '../../api/client';
+import { api, downloadStory, LeadDetail, PlagiarismStatus, ReviewDecision, PublicationStatus } from '../../api/client';
 import { StatusBadge } from '../../components/StatusBadge';
 import { LeadJourneyStepper } from '../../components/LeadJourneyStepper';
 import { 
@@ -459,15 +459,14 @@ export const LeadDetailPage: React.FC = () => {
                       </p>
                     </div>
 
-                    <a
-                      href={`http://localhost:8000${submission.file_url}`}
-                      target="_blank"
-                      rel="noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => downloadStory(submission).catch(() => setActionError('Could not download the story file.'))}
                       className="btn-secondary text-xs py-2 px-4 shadow-xs shrink-0"
                     >
                       <Download className="w-4 h-4" />
                       Download {submission.file_name}
-                    </a>
+                    </button>
                   </div>
                 </div>
               ) : (

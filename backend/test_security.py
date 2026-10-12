@@ -50,8 +50,9 @@ def main():
         # Fix 3: tracking ID is random, not a counter
         assert lead1["lead_id"].startswith("WR-") and len(lead1["lead_id"].split("-")[2]) == 8, lead1["lead_id"]
         # Requirement 17: same student, different case email -> same Student, same registration in same Writathon
-        again = c.post(f"{API}/leads/register", json={**form, "parent_email": "pooja@example.com", "child_name": "aarav sharma", "writathon_id": w1}).json()
-        assert again["id"] == lead1["id"]
+        # ...and the duplicate gets a 409, not the existing record's tracking ID (which goes to the email on file)
+        again = c.post(f"{API}/leads/register", json={**form, "parent_email": "pooja@example.com", "child_name": "aarav sharma", "writathon_id": w1})
+        assert again.status_code == 409 and "lead_id" not in again.text, again.text
         lead2 = c.post(f"{API}/leads/register", json={**form, "writathon_id": w2}).json()
         assert lead2["id"] != lead1["id"] and lead2["student_id"] == lead1["student_id"]
 
@@ -88,9 +89,10 @@ def main():
         # Requirements 8-11: filters, ownership, bulk update
         ids = lambda q: {l["id"] for l in c.get(f"{API}/leads?{q}", headers=staff).json()}
         assert ids("submitted=true") == {lead1["id"]} and ids("submitted=false") == {lead2["id"]}  # requirements 9 & 10
-        assert c.post(f"{API}/leads/bulk-update", headers=staff, json={"lead_ids": [lead1["id"], lead2["id"]], "owner_id": staff_id}).json()["updated"] == 2
+        assert c.post(f"{API}/leads/bulk-update", headers=staff, json={"lead_ids": [lead1["id"], lead2["id"]], "owner_id": staff_id}).status_code == 403
+        assert c.post(f"{API}/leads/bulk-update", headers=admin, json={"lead_ids": [lead1["id"], lead2["id"]], "owner_id": staff_id}).json()["updated"] == 2
         assert ids(f"owner_id={staff_id}") == {lead1["id"], lead2["id"]} and ids("owner_id=0") == set()
-        assert c.post(f"{API}/leads/bulk-update", headers=staff, json={"lead_ids": [lead2["id"]], "owner_id": None}).json()["updated"] == 1
+        assert c.post(f"{API}/leads/bulk-update", headers=admin, json={"lead_ids": [lead2["id"]], "owner_id": None}).json()["updated"] == 1
         assert ids("owner_id=0") == {lead2["id"]}
         subs = c.get(f"{API}/submissions?writathon_id={w1}", headers=staff).json()
         assert [s["lead_code"] for s in subs] == [lead1["lead_id"]]
@@ -98,6 +100,7 @@ def main():
         assert report[w1]["submissions"] == 1 and report[w2]["not_submitted"] == 1
 
         # Fix 2: payments only through a signed webhook
+        assert c.post(f"{API}/plagiarism/{story_id}", headers=staff, json={"status": "PASS"}).status_code == 200
         assert c.post(f"{API}/reviews/{story_id}", headers=staff, json={"decision": "ELIGIBLE"}).status_code == 200
         pay = c.get(f"{API}/leads/by-code/{lead1['lead_id']}").json()["payment"]
         assert c.post(f"{API}/payments/process-checkout/{pay['payment_link_token']}", json={}).status_code == 403

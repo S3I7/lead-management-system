@@ -27,6 +27,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <Navigate to="/login" replace />;
   }
 
+  // If user is Staff attempting to access an Admin-only route:
+  if (user.role === 'STAFF' && !allowedRoles.includes('STAFF')) {
+    return <Navigate to="/staff/dashboard" replace />;
+  }
+
   // If user is a Parent or not in allowedRoles -> restrict access
   if (!allowedRoles.includes(user.role as any)) {
     return (

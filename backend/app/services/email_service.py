@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
+from email.message import EmailMessage
 import html
 import logging
+import smtplib
 from typing import Optional, Any
 from sqlalchemy.orm import Session
 
@@ -231,7 +233,7 @@ class EmailService:
     ) -> CommunicationLog:
         """
         Retrieves template from database (or default fallback), interpolates context,
-        records the email in communication_logs, and marks SENT.
+        delivers it (see deliver) and records the outcome in communication_logs.
         """
         db_template = db.query(EmailTemplate).filter(EmailTemplate.template_code == template_code).first()
         
@@ -255,15 +257,45 @@ class EmailService:
             recipient=recipient,
             subject=subject,
             body_content=body,
-            status=CommStatus.SENT,
-            sent_at=datetime.now(timezone.utc),
-            error_message=None
         )
+        EmailService.deliver(comm_log)
         db.add(comm_log)
         db.commit()
         db.refresh(comm_log)
-        logger.info(f"Email sent & logged to {recipient} [template={template_code.value}]")
         return comm_log
+
+    @staticmethod
+    def deliver(comm_log: CommunicationLog) -> None:
+        """Sends the email over SMTP and records the real outcome on the log row. Never raises:
+        a mail outage must not roll back the registration/submission that triggered it."""
+        if not settings.SMTP_HOST:
+            comm_log.status = CommStatus.PENDING
+            comm_log.sent_at = None
+            comm_log.error_message = "Not delivered: SMTP is not configured."
+            logger.warning("Email not delivered (SMTP not configured) [template=%s lead=%s]", comm_log.template, comm_log.lead_id)
+            return
+        msg = EmailMessage()
+        msg["Subject"] = comm_log.subject
+        msg["From"] = settings.SMTP_FROM or settings.SMTP_USERNAME
+        msg["To"] = comm_log.recipient
+        msg.set_content("This email requires an HTML-capable email client.")
+        msg.add_alternative(comm_log.body_content, subtype="html")
+        try:
+            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as smtp:
+                if settings.SMTP_STARTTLS:
+                    smtp.starttls()
+                if settings.SMTP_USERNAME:
+                    smtp.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+                smtp.send_message(msg)
+            comm_log.status = CommStatus.SENT
+            comm_log.sent_at = datetime.now(timezone.utc)
+            comm_log.error_message = None
+            logger.info("Email sent [template=%s lead=%s]", comm_log.template, comm_log.lead_id)
+        except Exception as e:  # SMTP/network errors are recorded, not raised
+            comm_log.status = CommStatus.FAILED
+            comm_log.sent_at = None
+            comm_log.error_message = f"{type(e).__name__}: {e}"[:500]
+            logger.error("Email delivery failed [template=%s lead=%s]: %s", comm_log.template, comm_log.lead_id, comm_log.error_message)
 
     @staticmethod
     def send_interest_confirmation(db: Session, lead: Lead, writathon: Writathon) -> CommunicationLog:
