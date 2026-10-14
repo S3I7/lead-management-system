@@ -216,9 +216,27 @@ def list_leads(
     if submitted_to:
         query = query.filter(Lead.submissions.any(StorySubmission.submitted_at < day(submitted_to + timedelta(days=1))))
     if age_group:
-        query = query.filter(Lead.age_group == age_group)
+        age_clean = age_group.strip()
+        if age_clean == "8-10":
+            query = query.filter(or_(Lead.age_group == "8-10", Lead.child_age.between(8, 10)))
+        elif age_clean == "11-13":
+            query = query.filter(or_(Lead.age_group == "11-13", Lead.child_age.between(11, 13)))
+        elif age_clean == "14-18":
+            query = query.filter(or_(Lead.age_group == "14-18", Lead.child_age.between(14, 18)))
+        else:
+            query = query.filter(Lead.age_group == age_clean)
     if submission_category:
-        query = query.filter(Lead.submission_category == submission_category)
+        cat_clean = submission_category.strip()
+        if cat_clean.lower() in ("other", "other…", "other..."):
+            standard_cats = ["short story", "poem", "novella", "comics"]
+            query = query.filter(
+                or_(
+                    Lead.submission_category.ilike("other%"),
+                    ~func.lower(Lead.submission_category).in_(standard_cats)
+                )
+            )
+        else:
+            query = query.filter(Lead.submission_category.ilike(cat_clean))
     if search:
         search_fmt = f"%{search.strip()}%"
         query = query.filter(
@@ -228,7 +246,8 @@ def list_leads(
                 Lead.parent_name.ilike(search_fmt),
                 Lead.parent_email.ilike(search_fmt),
                 Lead.school.ilike(search_fmt),
-                Lead.city.ilike(search_fmt)
+                Lead.city.ilike(search_fmt),
+                Lead.submission_category.ilike(search_fmt)
             )
         )
     response.headers["X-Total-Count"] = str(query.order_by(None).count())

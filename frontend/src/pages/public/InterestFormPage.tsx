@@ -41,6 +41,7 @@ export const InterestFormPage: React.FC = () => {
   const [whatsapp, setWhatsapp] = useState('');
   const [ageGroup, setAgeGroup] = useState('');
   const [category, setCategory] = useState('');
+  const [customCategory, setCustomCategory] = useState('');
   const [grade, setGrade] = useState('');
   const [school, setSchool] = useState('');
   const [city, setCity] = useState('');
@@ -79,6 +80,12 @@ export const InterestFormPage: React.FC = () => {
       return;
     }
 
+    const effectiveCategory = category === 'Other' ? customCategory.trim() : category;
+    if (!effectiveCategory) {
+      setErrorMessage('Please specify your submission category.');
+      return;
+    }
+
     setIsLoading(true);
     try {
       const payload = {
@@ -88,7 +95,7 @@ export const InterestFormPage: React.FC = () => {
         parent_email: parentEmail,
         parent_phone: `${countryCode === 'other' ? '+' + customCode.trim().replace(/^\+/, '') : countryCode} ${whatsapp.trim()}`,
         age_group: ageGroup,
-        submission_category: category,
+        submission_category: effectiveCategory,
         grade,
         school,
         city,
@@ -231,10 +238,32 @@ export const InterestFormPage: React.FC = () => {
 
                   <div>
                     <label htmlFor="submission-category" className={labelCls}>Submission Category *</label>
-                    <select id="submission-category" value={category} onChange={(e) => setCategory(e.target.value)} className={`${inputCls} bg-white`} required>
+                    <select
+                      id="submission-category"
+                      value={category}
+                      onChange={(e) => {
+                        setCategory(e.target.value);
+                        if (e.target.value !== 'Other') setCustomCategory('');
+                      }}
+                      className={`${inputCls} bg-white`}
+                      required
+                    >
                       <option value="" disabled>Select category</option>
                       {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                      <option value="Other">Other…</option>
                     </select>
+                    {category === 'Other' && (
+                      <input
+                        id="custom-category"
+                        type="text"
+                        placeholder="Please specify category (e.g. Essay, Article, Play)"
+                        value={customCategory}
+                        onChange={(e) => setCustomCategory(e.target.value)}
+                        className={`${inputCls} mt-2 bg-white`}
+                        maxLength={50}
+                        required
+                      />
+                    )}
                   </div>
 
                   <TextField label="Class and Section *" value={grade} onChange={setGrade} placeholder="e.g. Grade 6 – B" />

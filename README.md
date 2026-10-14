@@ -129,14 +129,15 @@ npm run dev -- --port 5173 --host
 
 ---
 
-## 👥 Demo Credentials (`DEMO_MODE=true` only)
+## 👥 Staff & Admin Credentials (`DEMO_MODE=true` only)
 
 Log in with:
 | Role | Email | Password | Access Privileges |
 | :--- | :--- | :--- | :--- |
 | **Administrator** | `admin@writathon.com` | `admin123` | Full access to CRM, Writathons, Templates, Users |
 | **Staff Reviewer** | `reviewer@writathon.com` | `staff123` | Leads management, Plagiarism assessment, Editorial decision |
-| **Parent / User** | `parent@example.com` | `parent123` | Interest registration, Story upload, Status tracking, Payment |
+
+> **Note for Parents**: Parents do not need an account or login. All registration, story submission, review tracking, and payments are done friction-free using their unique Tracking ID (`WR-YYYY-XXXXXXXX`) or email token link.
 
 ---
 

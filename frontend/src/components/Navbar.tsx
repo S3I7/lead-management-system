@@ -112,18 +112,6 @@ export const Navbar: React.FC = () => {
               </>
             )}
 
-            {user?.role === 'PARENT' && (
-              <>
-                <span className="h-5 w-px bg-gray-300 mx-2" />
-                <Link
-                  to="/status"
-                  className="px-4 py-2 rounded-pill text-sm font-medium flex items-center gap-1.5 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors"
-                >
-                  <BookOpen className="w-4 h-4" />
-                  Parent Portal
-                </Link>
-              </>
-            )}
           </nav>
 
           {/* Right Action: User profile & Logout or Sign In */}
@@ -153,7 +141,7 @@ export const Navbar: React.FC = () => {
               </div>
             ) : (
               <Link to="/login" className="btn-primary text-xs py-2 px-5">
-                Sign In
+                Staff Sign In
               </Link>
             )}
 

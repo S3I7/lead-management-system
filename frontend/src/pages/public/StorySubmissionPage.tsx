@@ -3,6 +3,15 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { api, PublicLeadDetail } from '../../api/client';
 import { Upload, FileText, CheckCircle2, AlertCircle, Sparkles, Shield, ArrowRight } from 'lucide-react';
 
+const GENRES = [
+  'Fantasy & Adventure',
+  'Sci-Fi & Space',
+  'Mystery & Detective',
+  'Fable & Moral Tale',
+  'Real Life & Family',
+  'Poetry & Rhymes',
+];
+
 export const StorySubmissionPage: React.FC = () => {
   const { leadId: paramLeadId } = useParams<{ leadId?: string }>();
   const [searchParams] = useSearchParams();
@@ -18,6 +27,7 @@ export const StorySubmissionPage: React.FC = () => {
   const [title, setTitle] = useState('');
   const [wordCount, setWordCount] = useState<string>('');
   const [category, setCategory] = useState('Fantasy & Adventure');
+  const [customCategory, setCustomCategory] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [originalityChecked, setOriginalityChecked] = useState(false);
 
@@ -45,7 +55,15 @@ export const StorySubmissionPage: React.FC = () => {
       if (res.data.submission) {
         setTitle(res.data.submission.title);
         if (res.data.submission.word_count) setWordCount(String(res.data.submission.word_count));
-        if (res.data.submission.category) setCategory(res.data.submission.category);
+        if (res.data.submission.category) {
+          if (GENRES.includes(res.data.submission.category)) {
+            setCategory(res.data.submission.category);
+            setCustomCategory('');
+          } else {
+            setCategory('Other');
+            setCustomCategory(res.data.submission.category);
+          }
+        }
       }
     } catch (err: any) {
       setLeadError(err.response?.data?.detail || 'Could not locate registration for this ID.');
@@ -92,6 +110,12 @@ export const StorySubmissionPage: React.FC = () => {
       return;
     }
 
+    const finalCategory = category === 'Other' ? customCategory.trim() : category;
+    if (category === 'Other' && !finalCategory) {
+      setSubmitError('Please specify your genre/category.');
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmitError('');
 
@@ -100,7 +124,7 @@ export const StorySubmissionPage: React.FC = () => {
       formData.append('lead_token', tokenFromUrl || leadDetail.lead.lead_id);
       formData.append('title', title);
       if (wordCount) formData.append('word_count', wordCount);
-      if (category) formData.append('category', category);
+      if (finalCategory) formData.append('category', finalCategory);
       formData.append('originality_declaration', 'true');
       if (selectedFile) {
         formData.append('file', selectedFile);
@@ -275,16 +299,28 @@ export const StorySubmissionPage: React.FC = () => {
                     </label>
                     <select
                       value={category}
-                      onChange={(e) => setCategory(e.target.value)}
+                      onChange={(e) => {
+                        setCategory(e.target.value);
+                        if (e.target.value !== 'Other') setCustomCategory('');
+                      }}
                       className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm bg-white"
                     >
-                      <option value="Fantasy & Adventure">Fantasy & Adventure</option>
-                      <option value="Sci-Fi & Space">Sci-Fi & Space</option>
-                      <option value="Mystery & Detective">Mystery & Detective</option>
-                      <option value="Fable & Moral Tale">Fable & Moral Tale</option>
-                      <option value="Real Life & Family">Real Life & Family</option>
-                      <option value="Poetry & Rhymes">Poetry & Rhymes</option>
+                      {GENRES.map((g) => (
+                        <option key={g} value={g}>{g}</option>
+                      ))}
+                      <option value="Other">Other…</option>
                     </select>
+                    {category === 'Other' && (
+                      <input
+                        type="text"
+                        placeholder="Please specify genre / category (e.g. Historical Fiction, Thriller)"
+                        value={customCategory}
+                        onChange={(e) => setCustomCategory(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-xl border border-app-border focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm bg-white mt-2"
+                        maxLength={100}
+                        required
+                      />
+                    )}
                   </div>
                 </div>
 

@@ -82,7 +82,7 @@ class InterestFormSubmit(BaseModel):
     child_dob: Optional[date] = None
     child_age: Optional[int] = Field(None, ge=4, le=18)
     age_group: Literal["8-10", "11-13", "14-18"]
-    submission_category: Literal["Short Story", "Poem", "Novella", "Comics"]
+    submission_category: str = Field(..., min_length=1, max_length=50)
     grade: str = Field(..., min_length=1, max_length=50)
     school: str = Field(..., min_length=2, max_length=255)
     parent_name: str = Field(..., min_length=2, max_length=255)

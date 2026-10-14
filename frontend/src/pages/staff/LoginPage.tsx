@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { Feather, Lock, Mail, Shield, UserCheck, Heart, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { Feather, Lock, Mail, Shield, UserCheck, ArrowRight, Eye, EyeOff } from 'lucide-react';
 
 interface RolePreset {
-  id: 'ADMIN' | 'STAFF' | 'PARENT';
+  id: 'ADMIN' | 'STAFF';
   label: string;
   badge: string;
   email: string;
@@ -53,27 +53,11 @@ const ROLES: RolePreset[] = [
       badgeBg: 'bg-pink-100 text-pink-800',
     },
   },
-  {
-    id: 'PARENT',
-    label: 'Parent / User',
-    badge: 'Parent Portal',
-    email: 'parent@example.com',
-    password: 'parent123',
-    icon: Heart,
-    description: 'Submit stories, view review feedback, pay fees & track publication.',
-    destination: '/status',
-    colorClass: {
-      activeBorder: 'border-emerald-500 ring-2 ring-emerald-500/20',
-      activeBg: 'bg-emerald-50/70',
-      text: 'text-emerald-700',
-      badgeBg: 'bg-emerald-100 text-emerald-800',
-    },
-  },
 ];
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, logout } = useAuth();
 
   const [selectedRole, setSelectedRole] = useState<RolePreset>(ROLES[1]); // Default to Staff Reviewer
   const [email, setEmail] = useState<string>(ROLES[1].email);
@@ -101,7 +85,8 @@ export const LoginPage: React.FC = () => {
       } else if (loggedUser.role === 'STAFF') {
         navigate('/staff/dashboard');
       } else {
-        navigate('/status');
+        logout();
+        setError('Parents do not need an account. Please track your registration on the Check Status page using your Tracking ID.');
       }
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Invalid email or password. Please try again.');
@@ -121,10 +106,10 @@ export const LoginPage: React.FC = () => {
             <Feather className="w-6 h-6" />
           </div>
           <h1 className="text-3xl font-heading font-extrabold text-text-dark tracking-tight">
-            Writathon System Sign In
+            Staff & Admin Sign In
           </h1>
           <p className="text-xs text-text-muted mt-1.5 max-w-sm mx-auto">
-            Select your account role below to authenticate with the corresponding access permissions.
+            Authorized portal for Editorial Reviewers and Administrators. Parents do not need an account and can use the public status tracker.
           </p>
         </div>
 
@@ -135,7 +120,7 @@ export const LoginPage: React.FC = () => {
             <label className="block text-xs font-bold text-text-dark uppercase tracking-wider mb-2.5">
               1. Choose Access Role:
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {ROLES.map((role) => {
                 const isSelected = selectedRole.id === role.id;
                 const RoleIcon = role.icon;
@@ -144,13 +129,13 @@ export const LoginPage: React.FC = () => {
                     key={role.id}
                     type="button"
                     onClick={() => handleSelectRole(role)}
-                    className={`p-3 rounded-2xl border text-left transition-all flex flex-col justify-between ${
+                    className={`p-3.5 rounded-2xl border text-left transition-all flex flex-col justify-between ${
                       isSelected
                         ? `${role.colorClass.activeBorder} ${role.colorClass.activeBg} shadow-xs`
                         : 'border-app-border hover:bg-gray-50 bg-white text-text-main'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-2.5">
                       <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${isSelected ? 'bg-white shadow-xs ' + role.colorClass.text : 'bg-gray-100 text-gray-500'}`}>
                         <RoleIcon className="w-4 h-4" />
                       </div>
@@ -253,7 +238,7 @@ export const LoginPage: React.FC = () => {
           {/* Quick Note */}
           <div className="border-t border-app-border pt-4 text-center">
             <p className="text-[11px] text-text-muted">
-              Signing in as <strong>Parent</strong> directs you to the Parent Portal. Staff and Admin credentials grant access to the CRM Editorial Dashboard.
+              Are you a parent tracking a story? No login is needed. <Link to="/status" className="text-primary font-semibold hover:underline">Track with your Lead ID here</Link>.
             </p>
           </div>
         </div>
